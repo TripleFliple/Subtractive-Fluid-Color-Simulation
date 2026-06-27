@@ -45,7 +45,7 @@ let config = {
     DRAG_FORCE: 6000,
     SHADING: false,
     COLORFUL: false,
-    COLOR_UPDATE_SPEED: 10,
+    COLOR_UPDATE_SPEED: 2,
     PAUSED: false,
     TICK_RATE: 1.0,
     BACK_COLOR: { r: 0, g: 0, b: 0 },
@@ -2056,7 +2056,7 @@ function updateColors (dt) {
     if (colorUpdateTimer >= 1) {
         colorUpdateTimer = wrap(colorUpdateTimer, 0, 1);
         pointers.forEach(p => {
-            p.color = { r: STAR_PICK_RGB.r, g: STAR_PICK_RGB.g, b: STAR_PICK_RGB.b };
+            p.color = generateColor();
         });
     }
 }
@@ -2315,7 +2315,6 @@ function splatPointer (pointer) {
     let dx = pointer.deltaX * config.DRAG_FORCE;
     let dy = pointer.deltaY * config.DRAG_FORCE;
     var _pc = RGBtoHSV(pointer.color.r, pointer.color.g, pointer.color.b);
-    _pc.s *= 0.2;
     splat(pointer.texcoordX, pointer.texcoordY, dx, dy, _pc);
 }
 
@@ -2438,7 +2437,7 @@ function updatePointerDownData (pointer, id, posX, posY) {
     pointer.prevTexcoordY = pointer.texcoordY;
     pointer.deltaX = 0;
     pointer.deltaY = 0;
-    pointer.color = { r: STAR_PICK_RGB.r, g: STAR_PICK_RGB.g, b: STAR_PICK_RGB.b };
+    pointer.color = config.COLORFUL ? generateColor() : { r: STAR_PICK_RGB.r, g: STAR_PICK_RGB.g, b: STAR_PICK_RGB.b };
 }
 
 function updatePointerMoveData (pointer, posX, posY) {
@@ -2884,7 +2883,7 @@ function starDrawDots() {
 
         // Preset swatches — 2 rows of 7
         // Row 1: Red, Red-Orange, Orange, Yellow-Orange, Yellow, Yellow-Green, Green
-        // Row 2: Blue-Green, Blue, Blue-Violet, Violet, Red-Violet, White, Black
+        // Row 2: Blue-Green, Blue, Blue-Violet, Violet, Red-Violet, White
         var presetRow = document.createElement('div');
         presetRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:3px;margin-bottom:8px';
         var presets = [
@@ -2901,23 +2900,21 @@ function starDrawDots() {
             { rgb:[110,  0,190], label:'Violet'         },
             { rgb:[190,  0,120], label:'Red-Violet'     },
             { rgb:[255,255,255], label:'White'          },
-            { rgb:[  1,  1,  1], label:'Black'          },
         ];
         presets.forEach(function(p) {
             var rgb = p.rgb;
             var sw = document.createElement('div');
             sw.title = p.label;
-            var isBlack = p.label === 'Black';
             var isWhite = p.label === 'White';
             sw.style.cssText = 'width:28px;height:28px;border-radius:4px;cursor:pointer;flex-shrink:0;'+
                 'background:rgb('+rgb[0]+','+rgb[1]+','+rgb[2]+');'+
-                'border:1px solid rgba(255,255,255,'+(isBlack?'0.35':'0.15')+')';
+                'border:1px solid rgba(255,255,255,0.15)';
             sw.addEventListener('click', function(e) {
                 e.stopPropagation();
                 STAR_PICK_RGB = {r:rgb[0]/255, g:rgb[1]/255, b:rgb[2]/255};
                 swatch.style.background = 'rgb('+rgb[0]+','+rgb[1]+','+rgb[2]+')';
                 var hsv = RGBtoHSV(rgb[0]/255, rgb[1]/255, rgb[2]/255);
-                hueSpanR.textContent = isBlack ? 'Black' : isWhite ? 'White' : Math.round(hsv.h * 360) + '\u00b0';
+                hueSpanR.textContent = isWhite ? 'White' : Math.round(hsv.h * 360) + '\u00b0';
             });
             presetRow.appendChild(sw);
         });
