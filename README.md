@@ -25,6 +25,6 @@ For deployment, any static host works (GitHub Pages, Netlify, etc.) — no build
 
 Based on [WebGL Fluid Simulation](https://github.com/PavelDoGreat/WebGL-Fluid-Simulation) by Pavel Dobryakov, MIT License.
 
-All modifications © 2025 Trey Hakanson, MIT License.
+All modifications © 2025 Trey Holman, MIT License.
 
-See [LICENSE](LICENSE) for full terms.
+See [LICENSE](https://github.com/TripleFliple/Subtractive-Fluid-Color-Simulation/blob/main/LICENSE) for full terms.
