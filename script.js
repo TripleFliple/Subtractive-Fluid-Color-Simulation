@@ -222,6 +222,12 @@ function startGUI () {
     #ctrl-panel.cp-hidden .cp-tab-bar,
     #ctrl-panel.cp-hidden .cp-pane{display:none!important}
     #ctrl-panel.cp-hidden .cp-header{border-radius:8px}
+    @media (max-width: 600px) {
+      #ctrl-panel{left:0;right:0;top:auto;bottom:0;width:100%;border-radius:0}
+      .cp-header{border-radius:0!important}
+      .cp-pane{border-radius:0!important;max-height:50vh;overflow-y:auto}
+      .sp-sl{min-height:28px}
+    }
     `;
     document.head.appendChild(css);
 
@@ -424,11 +430,15 @@ function startGUI () {
     window._cpSwitchTab = switchTab;
     window._cpPanes = panes;
 
-    if (isMobile()) panel.classList.add('cp-hidden');
+    if (isMobile()) {
+        panelOpen = false;
+        panel.classList.add('cp-hidden');
+        hbtn.textContent = 'Open Controls ▼';
+    }
 }
 
 function isMobile () {
-    return /Mobi|Android/i.test(navigator.userAgent);
+    return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 }
 
 function captureScreenshot () {
@@ -2712,6 +2722,73 @@ canvas.addEventListener('contextmenu', function(e) {
         starRemove(x, y);
     }
 }, true);
+
+// ── Touch handlers for star/fan placement ────────────────────────────────
+// Tap = place star/fan, long-press (500ms) = remove nearest star/fan
+var _touchPlaceTimer = null;
+var _touchPlaceId = null;
+var _touchMoved = false;
+
+canvas.addEventListener('touchstart', function(e) {
+    // Only handle single-finger taps for placement (multi-touch handled by fluid)
+    if (e.targetTouches.length !== 1) return;
+    var t = e.targetTouches[0];
+    if (starPanelHit(t.clientX, t.clientY)) return;
+    _touchMoved = false;
+    _touchPlaceId = t.identifier;
+    _touchPlaceTimer = setTimeout(function() {
+        // Long-press: remove
+        _touchPlaceTimer = null;
+        if (_touchMoved) return;
+        var rect = canvas.getBoundingClientRect();
+        var x = (t.clientX - rect.left) / rect.width;
+        var y = 1.0 - (t.clientY - rect.top) / rect.height;
+        if (window._starPanelMode && window._starPanelMode() === 'fan') {
+            fanRemove(x, y);
+        } else {
+            starRemove(x, y);
+        }
+    }, 500);
+}, { passive: true });
+
+canvas.addEventListener('touchmove', function(e) {
+    if (e.targetTouches.length !== 1) return;
+    var t = e.targetTouches[0];
+    if (t.identifier !== _touchPlaceId) return;
+    // If finger moves more than ~8px, cancel tap placement
+    if (!_touchMoved) {
+        _touchMoved = true;
+        if (_touchPlaceTimer) { clearTimeout(_touchPlaceTimer); _touchPlaceTimer = null; }
+    }
+}, { passive: true });
+
+canvas.addEventListener('touchend', function(e) {
+    var found = false;
+    for (var i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier === _touchPlaceId) { found = true; break; }
+    }
+    if (!found) return;
+    if (_touchPlaceTimer) {
+        clearTimeout(_touchPlaceTimer);
+        _touchPlaceTimer = null;
+        if (!_touchMoved) {
+            // Short tap: place star/fan
+            var t = e.changedTouches[0];
+            if (!starPanelHit(t.clientX, t.clientY)) {
+                var rect = canvas.getBoundingClientRect();
+                var x = (t.clientX - rect.left) / rect.width;
+                var y = 1.0 - (t.clientY - rect.top) / rect.height;
+                if (window._starPanelMode && window._starPanelMode() === 'fan') {
+                    fanPlace(x, y);
+                } else {
+                    starPlace(x, y);
+                }
+            }
+        }
+    }
+    _touchPlaceId = null;
+    _touchMoved = false;
+}, { passive: true });
 
 function starPanelHit(cx, cy) {
     var p = document.getElementById('ctrl-panel');
