@@ -124,7 +124,7 @@ function eraserApply(clientX, clientY) {
     gl.uniform1i(dyeSplatProgram.uniforms.uTarget, dye.read.attach(0));
     gl.uniform1f(dyeSplatProgram.uniforms.aspectRatio, canvas.width / canvas.height);
     gl.uniform2f(dyeSplatProgram.uniforms.point, x, y);
-    gl.uniform3f(dyeSplatProgram.uniforms.color, 0.0, 0.0, 0.0); // h=0,s=0,v=0 → black/erase path
+    gl.uniform3f(dyeSplatProgram.uniforms.color, -1.0, 0.0, 0.0); // sentinel: erase path
     gl.uniform1f(dyeSplatProgram.uniforms.radius, eraserUVRadius());
     blit(dye.write);
     dye.swap();
@@ -1450,10 +1450,9 @@ const dyeSplatShader = compileShader(gl.FRAGMENT_SHADER, `
 
         vec4 base = texture2D(uTarget, vUv);
 
-        // ERASE: h=0, s=0, v=0 → hard circle erase, no gaussian tail.
-        // p.x is already aspect-corrected so length(p) maps to screen-space distance.
-        // radius is the raw UV radius (not squared), so length(p) > radius is exact.
-        if (color.r < 0.001 && color.g < 0.001 && color.b < 0.001) {
+        // ERASE: sentinel color.r = -1.0 (impossible for real hues which are 0-1).
+        // This avoids any ambiguity with hue 0° (red) on mobile GPU drivers.
+        if (color.r < -0.5) {
             float dist = length(p);
             if (dist > radius) {
                 gl_FragColor = base;
