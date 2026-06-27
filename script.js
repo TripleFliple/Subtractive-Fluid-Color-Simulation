@@ -93,6 +93,106 @@ if (!ext.supportLinearFiltering) {
 
 startGUI();
 
+// ── Eraser cursor + logic ─────────────────────────────────────────────────
+var ERASER_RADIUS_PX = 40; // visual radius in CSS pixels — single source of truth
+
+var eraserCursor = document.createElement('div');
+var _ed = (ERASER_RADIUS_PX * 2) + 'px';
+eraserCursor.style.cssText = 'position:fixed;pointer-events:none;display:none;z-index:99999;' +
+    'width:'+_ed+';height:'+_ed+';border-radius:50%;border:2px solid rgba(255,60,60,0.9);' +
+    'transform:translate(-50%,-50%);box-sizing:border-box;';
+document.body.appendChild(eraserCursor);
+
+function eraserUVRadius() {
+    // Convert the CSS pixel radius to UV space using the canvas's current rendered size.
+    // The splat gaussian uses UV coords where y spans 0-1 regardless of aspect ratio,
+    // so we convert via canvas height. correctRadius() then handles aspect ratio for x.
+    var rect = canvas.getBoundingClientRect();
+    return ERASER_RADIUS_PX / rect.height;
+}
+
+function eraserApply(clientX, clientY) {
+    if (!window.ERASER_ACTIVE) return;
+    var rect = canvas.getBoundingClientRect();
+    var x = (clientX - rect.left) / rect.width;
+    var y = 1.0 - (clientY - rect.top) / rect.height;
+
+    // Clear a circular area of dye by splatting zeroed color over it
+    // Use a large negative-value approach: write val=0, sat=0, sc=(0,0) into dye
+    gl.disable(gl.BLEND);
+    dyeSplatProgram.bind();
+    gl.uniform1i(dyeSplatProgram.uniforms.uTarget, dye.read.attach(0));
+    gl.uniform1f(dyeSplatProgram.uniforms.aspectRatio, canvas.width / canvas.height);
+    gl.uniform2f(dyeSplatProgram.uniforms.point, x, y);
+    gl.uniform3f(dyeSplatProgram.uniforms.color, 0.0, 0.0, 0.0); // h=0,s=0,v=0 → black/erase path
+    gl.uniform1f(dyeSplatProgram.uniforms.radius, eraserUVRadius());
+    blit(dye.write);
+    dye.swap();
+
+    // Also zero out velocity within the erased circle.
+    // Gaussian sigma = r²/5.3 constrains the tail to fade out at the circle edge.
+    var vr = eraserUVRadius();
+    var velocityRadius = (vr * vr) / 5.3;
+    splatProgram.bind();
+    gl.uniform1i(splatProgram.uniforms.uTarget, velocity.read.attach(0));
+    gl.uniform1f(splatProgram.uniforms.aspectRatio, canvas.width / canvas.height);
+    gl.uniform2f(splatProgram.uniforms.point, x, y);
+    gl.uniform3f(splatProgram.uniforms.color, 0.0, 0.0, 0.0);
+    gl.uniform1f(splatProgram.uniforms.radius, velocityRadius);
+    blit(velocity.write);
+    velocity.swap();
+
+    // Remove any stars or fans within eraser radius
+    var removeThreshold = eraserUVRadius() * 1.5;
+    STARS = STARS.filter(function(s) {
+        var dx = s.x - x, dy = s.y - y;
+        return Math.sqrt(dx*dx + dy*dy) > removeThreshold;
+    });
+    FANS = FANS.filter(function(f) {
+        var dx = f.x - x, dy = f.y - y;
+        return Math.sqrt(dx*dx + dy*dy) > removeThreshold;
+    });
+    starDrawDots();
+}
+
+// Mouse eraser events
+canvas.addEventListener('mousemove', function(e) {
+    if (!window.ERASER_ACTIVE) return;
+    eraserCursor.style.display = 'block';
+    eraserCursor.style.left = e.clientX + 'px';
+    eraserCursor.style.top  = e.clientY + 'px';
+    if (e.buttons & 1) eraserApply(e.clientX, e.clientY);
+});
+canvas.addEventListener('mousedown', function(e) {
+    if (!window.ERASER_ACTIVE || e.button !== 0) return;
+    eraserApply(e.clientX, e.clientY);
+});
+canvas.addEventListener('mouseleave', function() {
+    eraserCursor.style.display = 'none';
+});
+
+// Touch eraser events
+canvas.addEventListener('touchmove', function(e) {
+    if (!window.ERASER_ACTIVE) return;
+    var t = e.touches[0];
+    eraserCursor.style.display = 'block';
+    eraserCursor.style.left = t.clientX + 'px';
+    eraserCursor.style.top  = t.clientY + 'px';
+    eraserApply(t.clientX, t.clientY);
+}, { passive: true });
+canvas.addEventListener('touchstart', function(e) {
+    if (!window.ERASER_ACTIVE) return;
+    var t = e.touches[0];
+    eraserCursor.style.display = 'block';
+    eraserCursor.style.left = t.clientX + 'px';
+    eraserCursor.style.top  = t.clientY + 'px';
+    eraserApply(t.clientX, t.clientY);
+}, { passive: true });
+canvas.addEventListener('touchend', function() {
+    if (window.ERASER_ACTIVE) eraserCursor.style.display = 'none';
+}, { passive: true });
+// ── End eraser ────────────────────────────────────────────────────────────
+
 function getWebGLContext (canvas) {
     const params = { alpha: true, depth: false, stencil: false, antialias: false, preserveDrawingBuffer: false };
 
@@ -251,7 +351,26 @@ function startGUI () {
         panel.classList.toggle('cp-hidden', !panelOpen);
         hbtn.textContent = panelOpen ? 'Close Controls ▲' : 'Open Controls ▼';
     });
+
+    // Eraser button
+    var eraserBtn = document.createElement('button');
+    eraserBtn.className = 'cp-btn';
+    eraserBtn.style.margin = '0';
+    eraserBtn.textContent = '⌫ Eraser';
+    eraserBtn.setAttribute('data-eraser-btn', '1');
+    window.ERASER_ACTIVE = false;
+    eraserBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        window.ERASER_ACTIVE = !window.ERASER_ACTIVE;
+        eraserBtn.style.color          = window.ERASER_ACTIVE ? '#f55' : '';
+        eraserBtn.style.borderColor    = window.ERASER_ACTIVE ? '#f55' : '';
+        eraserBtn.style.background     = window.ERASER_ACTIVE ? 'rgba(255,80,80,0.15)' : '';
+        canvas.style.cursor            = window.ERASER_ACTIVE ? 'none' : '';
+        if (!window.ERASER_ACTIVE) eraserCursor.style.display = 'none';
+    });
+
     header.appendChild(htitle);
+    header.appendChild(eraserBtn);
     header.appendChild(hbtn);
     panel.appendChild(header);
 
@@ -965,7 +1084,7 @@ const displayShaderSource = `
 
     // Recover RYB-stored hue (0-1) from SC unit vector
     float scToHue (vec2 sc) {
-        return fract(atan(sc.x, sc.y) / 6.28318530718 + 1.0);
+        return mod(atan(sc.x, sc.y) / 6.28318530718 + 1.0, 1.0);
     }
 
     // Invert RYB map: stored hue -> display RGB hue
@@ -1331,6 +1450,21 @@ const dyeSplatShader = compileShader(gl.FRAGMENT_SHADER, `
 
         vec4 base = texture2D(uTarget, vUv);
 
+        // ERASE: h=0, s=0, v=0 → hard circle erase, no gaussian tail.
+        // p.x is already aspect-corrected so length(p) maps to screen-space distance.
+        // radius is the raw UV radius (not squared), so length(p) > radius is exact.
+        if (color.r < 0.001 && color.g < 0.001 && color.b < 0.001) {
+            float dist = length(p);
+            if (dist > radius) {
+                gl_FragColor = base;
+                return;
+            }
+            // Inside circle: erase with a thin softened edge
+            float edgeSoft = 1.0 - smoothstep(radius * 0.85, radius, dist);
+            gl_FragColor = vec4(base.rg * (1.0 - edgeSoft), base.b * (1.0 - edgeSoft), base.a * (1.0 - edgeSoft));
+            return;
+        }
+
         // Remap hue before encoding as unit vector
         float remapped = remapHue(color.r);
         float angle = remapped * 6.28318530718;
@@ -1422,7 +1556,10 @@ const advectionShader = compileShader(gl.FRAGMENT_SHADER, `
 
     // Get hue 0-1 from SC vector
     float scHue (vec2 sc) {
-        return fract(atan(sc.x, sc.y) / 6.28318530718 + 1.0);
+        // atan(0,1)=0 → 0/TWO_PI+1 = 1.0 exactly, and fract(1.0) is
+        // implementation-defined on some GPUs (returns 1.0 not 0.0).
+        // mod(x, 1.0) is more reliable: mod(1.0, 1.0) = 0.0 always.
+        return mod(atan(sc.x, sc.y) / 6.28318530718 + 1.0, 1.0);
     }
 
     void main () {
@@ -1562,7 +1699,7 @@ const hueDiffuseShader = compileShader(gl.FRAGMENT_SHADER, `
 
     // Recover RYB-stored hue from SC vector (0-1)
     float scToHue (vec2 sc) {
-        return fract(atan(sc.x, sc.y) / 6.28318530718 + 1.0);
+        return mod(atan(sc.x, sc.y) / 6.28318530718 + 1.0, 1.0);
     }
 
     void main () {
@@ -2341,7 +2478,7 @@ function multipleSplats (amount) {
     }
 }
 
-function splat (x, y, dx, dy, color) {
+function splat (x, y, dx, dy, color, velocityOnly) {
     // Disable blending — splats must replace dye buffer contents, not composite
     // on top. If blend is ON (left over from render()), the dye write gets
     // additively blended into dye.write, raising saturation/value globally.
@@ -2356,6 +2493,8 @@ function splat (x, y, dx, dy, color) {
     gl.uniform1f(splatProgram.uniforms.radius, correctRadius(config.SPLAT_RADIUS / 100.0));
     blit(velocity.write);
     velocity.swap();
+
+    if (velocityOnly) return;
 
     // Dye pass — HSV circular-hue blend
     dyeSplatProgram.bind();
@@ -2376,6 +2515,7 @@ function correctRadius (radius) {
 }
 
 canvas.addEventListener('mousedown', e => {
+    if (window.ERASER_ACTIVE) return;
     let posX = scaleByPixelRatio(e.offsetX);
     let posY = scaleByPixelRatio(e.offsetY);
     let pointer = pointers.find(p => p.id == -1);
@@ -2397,6 +2537,7 @@ window.addEventListener('mouseup', () => {
 });
 
 canvas.addEventListener('touchstart', e => {
+    if (window.ERASER_ACTIVE) return;
     e.preventDefault();
     const touches = e.targetTouches;
     while (touches.length >= pointers.length)
@@ -2409,6 +2550,7 @@ canvas.addEventListener('touchstart', e => {
 });
 
 canvas.addEventListener('touchmove', e => {
+    if (window.ERASER_ACTIVE) return;
     e.preventDefault();
     const touches = e.targetTouches;
     for (let i = 0; i < touches.length; i++) {
@@ -2638,7 +2780,7 @@ function starUpdate(dt) {
                 splat(gx, gy,
                     -cosg * star.gravForce,
                     -sing * star.gravForce,
-                    { h: star.h, s: 0.0, v: 0.0 }); // velocity-only, no dye
+                    null, true); // velocity-only, skip dye pass entirely
             }
         }
     });
@@ -2684,6 +2826,7 @@ function fanUpdate(dt) {
 // (_starDown, _starDrag declared above)
 
 canvas.addEventListener('mousedown', function(e) {
+    if (window.ERASER_ACTIVE) return;
     if (e.button !== 0) return;
     _starDown = {x: e.clientX, y: e.clientY};
     _starDrag = false;
@@ -2731,6 +2874,7 @@ var _touchMoved = false;
 
 canvas.addEventListener('touchstart', function(e) {
     // Only handle single-finger taps for placement (multi-touch handled by fluid)
+    if (window.ERASER_ACTIVE) return;
     if (e.targetTouches.length !== 1) return;
     var t = e.targetTouches[0];
     if (starPanelHit(t.clientX, t.clientY)) return;
@@ -3099,11 +3243,21 @@ function starDrawDots() {
         window.addEventListener('mouseup',   function()  { hDrag=false; });
 
         // Block panel clicks from reaching canvas
+        // Also deactivate eraser whenever the user interacts with the panel
+        function deactivateEraser() {
+            if (!window.ERASER_ACTIVE) return;
+            window.ERASER_ACTIVE = false;
+            var eb = document.querySelector('[data-eraser-btn]');
+            if (eb) { eb.style.color = ''; eb.style.borderColor = ''; eb.style.background = ''; }
+            canvas.style.cursor = '';
+            eraserCursor.style.display = 'none';
+        }
         var ctrlPanel = document.getElementById('ctrl-panel');
         if (ctrlPanel) {
-            ctrlPanel.addEventListener('click',       function(e){ e.stopPropagation(); });
+            ctrlPanel.addEventListener('click',       function(e){ e.stopPropagation(); deactivateEraser(); });
             ctrlPanel.addEventListener('contextmenu', function(e){ e.stopPropagation(); e.preventDefault(); });
             ctrlPanel.addEventListener('mousedown',   function(e){ e.stopPropagation(); }, false);
+            ctrlPanel.addEventListener('touchstart',  function(e){ deactivateEraser(); }, { passive: true });
         }
     }
     inject();
