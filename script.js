@@ -2056,7 +2056,7 @@ function updateColors (dt) {
     if (colorUpdateTimer >= 1) {
         colorUpdateTimer = wrap(colorUpdateTimer, 0, 1);
         pointers.forEach(p => {
-            p.color = generateColor();
+            p.color = { r: STAR_PICK_RGB.r, g: STAR_PICK_RGB.g, b: STAR_PICK_RGB.b };
         });
     }
 }
@@ -2438,7 +2438,7 @@ function updatePointerDownData (pointer, id, posX, posY) {
     pointer.prevTexcoordY = pointer.texcoordY;
     pointer.deltaX = 0;
     pointer.deltaY = 0;
-    pointer.color = generateColor();
+    pointer.color = { r: STAR_PICK_RGB.r, g: STAR_PICK_RGB.g, b: STAR_PICK_RGB.b };
 }
 
 function updatePointerMoveData (pointer, posX, posY) {
