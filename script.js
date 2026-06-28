@@ -156,14 +156,19 @@ function eraserApply(clientX, clientY) {
     starDrawDots();
 }
 
-// Mouse eraser events (desktop only)
+// Track real touch activity to block synthetic mouse events on mobile
+var _realTouchActive = false;
+document.addEventListener('touchstart', function() { _realTouchActive = true; }, { passive: true });
+document.addEventListener('touchend',   function() { setTimeout(function() { _realTouchActive = false; }, 500); }, { passive: true });
+
+// Mouse eraser events (desktop only — blocked during touch to prevent synthetic mousemove)
 canvas.addEventListener('mousemove', function(e) {
-    if (!window.ERASER_ACTIVE) return;
+    if (!window.ERASER_ACTIVE || _realTouchActive) return;
     _eraserCursorShow(e.clientX, e.clientY);
     if (e.buttons & 1) eraserApply(e.clientX, e.clientY);
 });
 canvas.addEventListener('mousedown', function(e) {
-    if (!window.ERASER_ACTIVE || e.button !== 0) return;
+    if (!window.ERASER_ACTIVE || e.button !== 0 || _realTouchActive) return;
     eraserApply(e.clientX, e.clientY);
 });
 canvas.addEventListener('mouseleave', function() {
