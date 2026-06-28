@@ -155,9 +155,10 @@ function eraserApply(clientX, clientY) {
     starDrawDots();
 }
 
-// Mouse eraser events
+// Mouse eraser events (desktop only — touch fires synthetic mousemove we must ignore)
 canvas.addEventListener('mousemove', function(e) {
     if (!window.ERASER_ACTIVE) return;
+    if (e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents) return;
     eraserCursor.style.display = 'block';
     eraserCursor.style.left = e.clientX + 'px';
     eraserCursor.style.top  = e.clientY + 'px';
