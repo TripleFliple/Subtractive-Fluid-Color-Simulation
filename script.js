@@ -2064,6 +2064,10 @@ function applyInputs () {
     if (splatStack.length > 0)
         multipleSplats(splatStack.pop());
 
+    // Don't create fluid splats while an object is selected — prevents
+    // accidental painting while moving/rotating
+    if (window._moveSelected) return;
+
     pointers.forEach(p => {
         if (p.moved) {
             p.moved = false;
@@ -2686,7 +2690,8 @@ canvas.addEventListener('mousemove', function(e) {
 canvas.addEventListener('mouseup', function(e) {
     if (e.button !== 0 || !_starDown || _starDrag) { _starDown = null; return; }
     if (starPanelHit(e.clientX, e.clientY)) { _starDown = null; return; }
-    if (window._moveSelected) { _starDown = null; return; } // selection consumed this tap
+    if (window._moveSelected) { _starDown = null; return; }
+    if (window._justDeselected) { window._justDeselected = false; _starDown = null; return; }
     // Use getBoundingClientRect so coords are correct even when canvas is CSS-scaled
     var rect = canvas.getBoundingClientRect();
     var x = (e.clientX - rect.left) / rect.width;
@@ -2764,9 +2769,10 @@ canvas.addEventListener('touchend', function(e) {
         clearTimeout(_touchPlaceTimer);
         _touchPlaceTimer = null;
         if (!_touchMoved) {
-            // Short tap: place star/fan only if not tapping an existing object
+            // Short tap: place star/fan only if not tapping an existing object or deselecting
             var t = e.changedTouches[0];
-            if (!starPanelHit(t.clientX, t.clientY) && !_moveHitTest(t.clientX, t.clientY)) {
+            if (window._justDeselected) { window._justDeselected = false; }
+            else if (!starPanelHit(t.clientX, t.clientY) && !_moveHitTest(t.clientX, t.clientY)) {
                 var rect = canvas.getBoundingClientRect();
                 var x = (t.clientX - rect.left) / rect.width;
                 var y = 1.0 - (t.clientY - rect.top) / rect.height;
@@ -2949,6 +2955,7 @@ function _movePointerDown(cx, cy) {
             // Tap on empty canvas — deselect, consume the tap
             if (sel.copyTimer) { clearTimeout(sel.copyTimer); sel.copyTimer = null; }
             window._moveSelected = null;
+            window._justDeselected = true;
             starDrawDots();
             return true; // consumed — prevent placement on this tap
         }
