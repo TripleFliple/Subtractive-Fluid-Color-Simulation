@@ -172,8 +172,13 @@ canvas.addEventListener('mouseleave', function() {
 });
 
 // Touch eraser events
+var _eraserTouchMoved = false;
+var _eraserFlashTimer = null;
+
 canvas.addEventListener('touchmove', function(e) {
     if (!window.ERASER_ACTIVE) return;
+    _eraserTouchMoved = true;
+    if (_eraserFlashTimer) { clearTimeout(_eraserFlashTimer); _eraserFlashTimer = null; }
     var t = e.touches[0];
     eraserCursor.style.display = 'block';
     eraserCursor.style.left = t.clientX + 'px';
@@ -182,14 +187,20 @@ canvas.addEventListener('touchmove', function(e) {
 }, { passive: true });
 canvas.addEventListener('touchstart', function(e) {
     if (!window.ERASER_ACTIVE) return;
+    _eraserTouchMoved = false;
     var t = e.touches[0];
     eraserCursor.style.display = 'block';
     eraserCursor.style.left = t.clientX + 'px';
     eraserCursor.style.top  = t.clientY + 'px';
     eraserApply(t.clientX, t.clientY);
+    // Flash timeout — if finger doesn't move, hide after 300ms
+    _eraserFlashTimer = setTimeout(function() {
+        _eraserFlashTimer = null;
+        if (!_eraserTouchMoved) eraserCursor.style.display = 'none';
+    }, 300);
 }, { passive: true });
-// Hide cursor on touchend at document level — catches lifts anywhere on screen
 document.addEventListener('touchend', function() {
+    if (_eraserFlashTimer) { clearTimeout(_eraserFlashTimer); _eraserFlashTimer = null; }
     eraserCursor.style.display = 'none';
 }, { passive: true });
 // ── End eraser ────────────────────────────────────────────────────────────
@@ -291,7 +302,6 @@ function startGUI () {
     #ctrl-panel *{box-sizing:border-box}
     .cp-header{background:rgba(0,0,0,0.88);border:1px solid rgba(255,255,255,0.12);
       border-radius:8px 8px 0 0;padding:6px 8px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-    .cp-header-title{font-size:12px;color:#fff;letter-spacing:1px;flex:1}
     .cp-tab-bar{display:flex;background:rgba(0,0,0,0.82);border-left:1px solid rgba(255,255,255,0.12);
       border-right:1px solid rgba(255,255,255,0.12)}
     .cp-tab{flex:1;padding:6px 4px;text-align:center;font-size:13px;color:#666;
@@ -3352,10 +3362,6 @@ function _drawSelectionRing(ctx, x, y) {
             hueSpanR.textContent = isWhite ? 'White' : Math.round(star.h * 360) + '\u00b0';
         };
         window._clearStarPanelStatus = function() { starStatus.textContent = ''; };
-
-        // Buttons
-        var btnDiv = document.createElement('div'); btnDiv.style.marginTop = '8px';
-        starPane.appendChild(btnDiv);
 
         var tip = document.createElement('div'); tip.className = 'sp-tip';
         tip.textContent = 'Tap canvas = place  |  Tap object = select  |  Drag center = move  |  Drag ring = rotate  |  Hold 1s = copy';
