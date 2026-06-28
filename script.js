@@ -191,7 +191,6 @@ canvas.addEventListener('touchmove', function(e) {
     if (!window.ERASER_ACTIVE) return;
     _eraserIsDragging = true;
     var t = e.touches[0];
-    _eraserCursorShow(t.clientX, t.clientY);
     eraserApply(t.clientX, t.clientY);
 }, { passive: true });
 
