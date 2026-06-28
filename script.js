@@ -188,8 +188,8 @@ canvas.addEventListener('touchstart', function(e) {
     eraserCursor.style.top  = t.clientY + 'px';
     eraserApply(t.clientX, t.clientY);
 }, { passive: true });
-canvas.addEventListener('touchend', function() {
-    // Always hide cursor on touchend — covers both tap and drag release
+// Hide cursor on touchend at document level — catches lifts anywhere on screen
+document.addEventListener('touchend', function() {
     eraserCursor.style.display = 'none';
 }, { passive: true });
 // ── End eraser ────────────────────────────────────────────────────────────
@@ -382,6 +382,7 @@ function startGUI () {
     var hbtn = document.createElement('button');
     hbtn.className = 'cp-btn';
     hbtn.style.margin = '0';
+    hbtn.setAttribute('data-toggle-btn', '1');
     hbtn.textContent = 'Close Controls ▲';
     var panelOpen = true;
     hbtn.addEventListener('click', function() {
@@ -3470,11 +3471,11 @@ function _drawSelectionRing(ctx, x, y) {
         }
         function deactivateMoveRotate(sourceEvent) {
             if (!window._moveSelected) return;
-            // Don't deselect when interacting with panel content — only deselect
-            // if the click/touch is on the header or tab bar, not sliders/swatches/panes
+            // Don't deselect when interacting with panel content or the open/close button
             if (sourceEvent && sourceEvent.target) {
                 var t = sourceEvent.target;
                 if (t.closest('.cp-pane') || t.closest('.cp-tab-bar')) return;
+                if (t.closest('[data-toggle-btn]')) return;
             }
             if (window._moveSelected.copyTimer) { clearTimeout(window._moveSelected.copyTimer); }
             window._moveSelected = null;
