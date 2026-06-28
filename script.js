@@ -2724,8 +2724,8 @@ canvas.addEventListener('touchstart', function(e) {
     if (e.targetTouches.length !== 1) return;
     var t = e.targetTouches[0];
     if (starPanelHit(t.clientX, t.clientY)) return;
-    // If _movePointerDown consumed this (object hit), don't start placement timer
-    if (window._moveSelected) return;
+    // If selection system consumed this touch (object tapped), don't place
+    if (window._touchConsumedBySelection) return;
     _touchMoved = false;
     _touchPlaceId = t.identifier;
     _touchPlaceTimer = setTimeout(function() {
@@ -3033,7 +3033,8 @@ canvas.addEventListener('touchstart', function(e) {
     if (window.ERASER_ACTIVE) return;
     var t = e.touches[0];
     var consumed = _movePointerDown(t.clientX, t.clientY);
-    if (consumed) e.stopPropagation();
+    if (consumed) { window._touchConsumedBySelection = true; e.stopPropagation(); }
+    else { window._touchConsumedBySelection = false; }
 }, { passive: true });
 canvas.addEventListener('touchmove', function(e) {
     if (!window._moveSelected || !window._moveSelected.dragMode) return;
@@ -3350,8 +3351,10 @@ function _drawSelectionRing(ctx, x, y) {
 
         // Block panel clicks from reaching canvas
         // Also deactivate eraser whenever the user interacts with the panel
-        function deactivateEraser() {
+        function deactivateEraser(sourceEvent) {
             if (!window.ERASER_ACTIVE) return;
+            // Don't deactivate if the eraser button itself was clicked — it handles its own toggle
+            if (sourceEvent && sourceEvent.target && sourceEvent.target.closest('[data-eraser-btn]')) return;
             window.ERASER_ACTIVE = false;
             var eb = document.querySelector('[data-eraser-btn]');
             if (eb) { eb.style.color = ''; eb.style.borderColor = ''; eb.style.background = ''; }
@@ -3366,10 +3369,10 @@ function _drawSelectionRing(ctx, x, y) {
         }
         var ctrlPanel = document.getElementById('ctrl-panel');
         if (ctrlPanel) {
-            ctrlPanel.addEventListener('click',       function(e){ e.stopPropagation(); deactivateEraser(); deactivateMoveRotate(); });
+            ctrlPanel.addEventListener('click',       function(e){ e.stopPropagation(); deactivateEraser(e); deactivateMoveRotate(); });
             ctrlPanel.addEventListener('contextmenu', function(e){ e.stopPropagation(); e.preventDefault(); });
             ctrlPanel.addEventListener('mousedown',   function(e){ e.stopPropagation(); }, false);
-            ctrlPanel.addEventListener('touchstart',  function(e){ deactivateEraser(); deactivateMoveRotate(); }, { passive: true });
+            ctrlPanel.addEventListener('touchstart',  function(e){ deactivateEraser(e); deactivateMoveRotate(); }, { passive: true });
         }
     }
     inject();
