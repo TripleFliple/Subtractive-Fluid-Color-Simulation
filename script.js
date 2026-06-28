@@ -76,7 +76,7 @@ function pointerPrototype () {
 
 let pointers = [];
 let splatStack = [];
-var STARS = []; var FANS = []; var STAR_PICK_RGB = {r:1,g:0,b:0}; var STAR_TICK = 0; var _starDown = null; var _starDrag = false;
+var STARS = []; var FANS = []; var STAR_PICK_RGB = {r:1,g:0.004,b:0}; var STAR_TICK = 0; var _starDown = null; var _starDrag = false;
 pointers.push(new pointerPrototype());
 
 const { gl, ext } = getWebGLContext(canvas);
@@ -2659,6 +2659,10 @@ function RGBtoHSV (r, g, b) {
         else                h = (r - g) / d + 4;
         h /= 6;
     }
+    // Nudge h away from exactly 0 — mobile GPUs have boundary issues at h=0
+    // (sin(0)=0, cos(0)=1 produces SC=(0,1) which some drivers mishandle).
+    // 0.001 is imperceptibly different from pure red visually.
+    if (h === 0) h = 0.001;
     return { h: h, s: s, v: v };
 }
 
@@ -2742,6 +2746,7 @@ function starUpdate(dt) {
         // ── Outward emission ──────────────────────────────────────────────
         // Dye buffer stores (sinH, cosH, sat, val). Star emits its hue
         // encoded as a unit vector, with additive value accumulation.
+        var emitH = (star.h === 0) ? 0.001 : star.h;
         var RAYS = 12;
         var frameAngle = (STAR_TICK % RAYS) * (2 * Math.PI / RAYS / RAYS);
         for (var i = 0; i < RAYS; i++) {
@@ -2754,7 +2759,7 @@ function starUpdate(dt) {
             var iy = star.y + sin * ir;
             if (ix >= 0.01 && ix <= 0.99 && iy >= 0.01 && iy <= 0.99) {
                 splat(ix, iy, cos * emitForce, sin * emitForce,
-                    { h: star.h, s: star.s, v: 0.15 * pulse });
+                    { h: emitH, s: star.s, v: 0.15 * pulse });
             }
 
             var or2 = star.emitRadius * 0.8;
@@ -2762,7 +2767,7 @@ function starUpdate(dt) {
             var oy2 = star.y + sin * or2;
             if (ox2 >= 0.01 && ox2 <= 0.99 && oy2 >= 0.01 && oy2 <= 0.99) {
                 splat(ox2, oy2, cos * emitForce * 0.6, sin * emitForce * 0.6,
-                    { h: star.h, s: star.s, v: 0.08 * pulse });
+                    { h: emitH, s: star.s, v: 0.08 * pulse });
             }
         }
 
@@ -3107,7 +3112,7 @@ function starDrawDots() {
         var presetRow = document.createElement('div');
         presetRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:3px;margin-bottom:8px';
         var presets = [
-            { rgb:[220,  0,  0], label:'Red'           },
+            { rgb:[220,  1,  0], label:'Red'           },
             { rgb:[230, 60,  0], label:'Red-Orange'    },
             { rgb:[255,120,  0], label:'Orange'         },
             { rgb:[255,185,  0], label:'Yellow-Orange'  },
