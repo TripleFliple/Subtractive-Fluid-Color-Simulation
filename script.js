@@ -1487,20 +1487,6 @@ const dyeSplatShader = compileShader(gl.FRAGMENT_SHADER, `
             return;
         }
 
-        // BLACK: near-zero val → darken existing dye
-        // Write SC=(0,0) so black fluid is visible as darkness while flowing.
-        // val is pulled toward zero to absorb brightness from what it touches.
-        if (color.b < 0.02) {
-            // Pull existing val toward darkness
-            float newV3 = base.a * (1.0 - falloff * 0.6);
-            // Also desaturate so colors fade toward black not muddy
-            float newS3 = base.b * (1.0 - falloff * 0.6);
-            // Zero out the SC vector where falloff is strong — makes it look black
-            vec2 newSC3 = base.rg * (1.0 - falloff * 0.8);
-            gl_FragColor = vec4(newSC3, newS3, newV3);
-            return;
-        }
-
         // Normal colored star
         float newV = min(base.a + color.b * falloff, 1.0);
         float newS = min(base.b + color.g * falloff, 1.0);
@@ -3141,6 +3127,14 @@ function starDrawDots() {
                 var hsv = RGBtoHSV(rgb[0]/255, rgb[1]/255, rgb[2]/255);
                 hueSpanR.textContent = isWhite ? 'White' : Math.round(hsv.h * 360) + '\u00b0';
             });
+            sw.addEventListener('touchend', function(e) {
+                e.stopPropagation();
+                e.preventDefault();
+                STAR_PICK_RGB = {r:rgb[0]/255, g:rgb[1]/255, b:rgb[2]/255};
+                swatch.style.background = 'rgb('+rgb[0]+','+rgb[1]+','+rgb[2]+')';
+                var hsv = RGBtoHSV(rgb[0]/255, rgb[1]/255, rgb[2]/255);
+                hueSpanR.textContent = isWhite ? 'White' : Math.round(hsv.h * 360) + '\u00b0';
+            });
             presetRow.appendChild(sw);
         });
         starPane.appendChild(presetRow);
@@ -3245,6 +3239,9 @@ function starDrawDots() {
         hueCanvas.addEventListener('mousedown', function(e) { hDrag=true; pickHue(e.clientX); e.stopPropagation(); });
         window.addEventListener('mousemove', function(e) { if(hDrag) pickHue(e.clientX); });
         window.addEventListener('mouseup',   function()  { hDrag=false; });
+        hueCanvas.addEventListener('touchstart', function(e) { e.stopPropagation(); e.preventDefault(); pickHue(e.touches[0].clientX); }, { passive: false });
+        hueCanvas.addEventListener('touchmove',  function(e) { e.stopPropagation(); e.preventDefault(); pickHue(e.touches[0].clientX); }, { passive: false });
+        hueCanvas.addEventListener('touchend',   function(e) { e.stopPropagation(); }, { passive: false });
 
         // Block panel clicks from reaching canvas
         // Also deactivate eraser whenever the user interacts with the panel
