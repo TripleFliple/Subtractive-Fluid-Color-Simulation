@@ -1089,23 +1089,14 @@ const displayShaderSource = `
 
     // Invert RYB map: stored hue -> display RGB hue
     float rybToDisplay (float hueStored) {
-        float rr[8]; float yr[8];
-        rr[0]=0.0;    yr[0]=0.0;
-        rr[1]=0.0972; yr[1]=0.1667;
-        rr[2]=0.1667; yr[2]=0.3333;
-        rr[3]=0.3333; yr[3]=0.5;
-        rr[4]=0.5;    yr[4]=0.5833;
-        rr[5]=0.6667; yr[5]=0.6667;
-        rr[6]=0.8333; yr[6]=0.8333;
-        rr[7]=1.0;    yr[7]=1.0;
         float hue = hueStored;
-        for (int i = 0; i < 7; i++) {
-            if (hueStored >= yr[i] && hueStored <= yr[i+1]) {
-                float t = (hueStored - yr[i]) / (yr[i+1] - yr[i]);
-                hue = rr[i] + t * (rr[i+1] - rr[i]);
-                break;
-            }
-        }
+        if      (hueStored <= 0.1667) { float t=(hueStored-0.0)   /0.1667; hue=0.0    +t*0.0972; }
+        else if (hueStored <= 0.3333) { float t=(hueStored-0.1667)/0.1666; hue=0.0972 +t*0.0695; }
+        else if (hueStored <= 0.5)    { float t=(hueStored-0.3333)/0.1667; hue=0.1667 +t*0.1666; }
+        else if (hueStored <= 0.5833) { float t=(hueStored-0.5)   /0.0833; hue=0.3333 +t*0.1667; }
+        else if (hueStored <= 0.6667) { float t=(hueStored-0.5833)/0.0834; hue=0.5    +t*0.1667; }
+        else if (hueStored <= 0.8333) { float t=(hueStored-0.6667)/0.1666; hue=0.6667 +t*0.1666; }
+        else                          { float t=(hueStored-0.8333)/0.1667; hue=0.8333 +t*0.1667; }
         return fract(hue);
     }
 
@@ -1417,22 +1408,13 @@ const dyeSplatShader = compileShader(gl.FRAGMENT_SHADER, `
         // Piecewise linear RYB map (8 segments)
         // RGB: 0/360, 35, 60, 120, 180, 240, 300, 360
         // RYB: 0/360, 60, 120, 180, 210, 240, 300, 360
-        float r[8]; float y[8];
-        r[0]=0.0;    y[0]=0.0;
-        r[1]=0.0972; y[1]=0.1667; // 35->60
-        r[2]=0.1667; y[2]=0.3333; // 60->120
-        r[3]=0.3333; y[3]=0.5;    // 120->180
-        r[4]=0.5;    y[4]=0.5833; // 180->210
-        r[5]=0.6667; y[5]=0.6667; // 240->240
-        r[6]=0.8333; y[6]=0.8333; // 300->300
-        r[7]=1.0;    y[7]=1.0;
-        for (int i = 0; i < 7; i++) {
-            if (h >= r[i] && h <= r[i+1]) {
-                float t = (h - r[i]) / (r[i+1] - r[i]);
-                return y[i] + t * (y[i+1] - y[i]);
-            }
-        }
-        return h;
+        if      (h <= 0.0972) return 0.0    + (h-0.0)   /0.0972 * 0.1667;
+        else if (h <= 0.1667) return 0.1667 + (h-0.0972)/0.0695 * 0.1666;
+        else if (h <= 0.3333) return 0.3333 + (h-0.1667)/0.1666 * 0.1667;
+        else if (h <= 0.5)    return 0.5    + (h-0.3333)/0.1667 * 0.0833;
+        else if (h <= 0.6667) return 0.5833 + (h-0.5)   /0.1667 * 0.0834;
+        else if (h <= 0.8333) return 0.6667 + (h-0.6667)/0.1666 * 0.1666;
+        else                  return 0.8333 + (h-0.8333)/0.1667 * 0.1667;
     }
 
     void main () {
