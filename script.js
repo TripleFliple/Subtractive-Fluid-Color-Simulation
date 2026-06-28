@@ -172,36 +172,32 @@ canvas.addEventListener('mouseleave', function() {
 });
 
 // Touch eraser events
-var _eraserTouchMoved = false;
-var _eraserFlashTimer = null;
+// Tap: erase silently, no circle shown (avoids stuck cursor)
+// Drag: show circle while finger moves, hide immediately on lift
+var _eraserIsDragging = false;
+
+canvas.addEventListener('touchstart', function(e) {
+    if (!window.ERASER_ACTIVE) return;
+    _eraserIsDragging = false;
+    var t = e.touches[0];
+    eraserApply(t.clientX, t.clientY); // erase on tap, no circle
+}, { passive: true });
 
 canvas.addEventListener('touchmove', function(e) {
     if (!window.ERASER_ACTIVE) return;
-    _eraserTouchMoved = true;
-    if (_eraserFlashTimer) { clearTimeout(_eraserFlashTimer); _eraserFlashTimer = null; }
+    _eraserIsDragging = true;
     var t = e.touches[0];
     eraserCursor.style.display = 'block';
     eraserCursor.style.left = t.clientX + 'px';
     eraserCursor.style.top  = t.clientY + 'px';
     eraserApply(t.clientX, t.clientY);
 }, { passive: true });
-canvas.addEventListener('touchstart', function(e) {
-    if (!window.ERASER_ACTIVE) return;
-    _eraserTouchMoved = false;
-    var t = e.touches[0];
-    eraserCursor.style.display = 'block';
-    eraserCursor.style.left = t.clientX + 'px';
-    eraserCursor.style.top  = t.clientY + 'px';
-    eraserApply(t.clientX, t.clientY);
-    // Flash timeout — if finger doesn't move, hide after 300ms
-    _eraserFlashTimer = setTimeout(function() {
-        _eraserFlashTimer = null;
-        if (!_eraserTouchMoved) eraserCursor.style.display = 'none';
-    }, 300);
-}, { passive: true });
+
 document.addEventListener('touchend', function() {
-    if (_eraserFlashTimer) { clearTimeout(_eraserFlashTimer); _eraserFlashTimer = null; }
-    eraserCursor.style.display = 'none';
+    if (_eraserIsDragging) {
+        eraserCursor.style.display = 'none';
+        _eraserIsDragging = false;
+    }
 }, { passive: true });
 // ── End eraser ────────────────────────────────────────────────────────────
 
