@@ -40,10 +40,10 @@ let config = {
     CURL: 40,
     SPLAT_RADIUS: 0.08,
     SPLAT_FORCE: 6000,
-    BLEND_RADIUS: 0.0,
     LUT_RESOLUTION: 256,
     DRAG_FORCE: 6000,
     SHADING: false,
+    SHADING_INTENSITY: 1.0,
     COLORFUL: false,
     COLOR_UPDATE_SPEED: 2,
     PAUSED: false,
@@ -189,7 +189,8 @@ canvas.addEventListener('touchstart', function(e) {
     eraserApply(t.clientX, t.clientY);
 }, { passive: true });
 canvas.addEventListener('touchend', function() {
-    if (window.ERASER_ACTIVE) eraserCursor.style.display = 'none';
+    // Always hide cursor on touchend — covers both tap and drag release
+    eraserCursor.style.display = 'none';
 }, { passive: true });
 // ── End eraser ────────────────────────────────────────────────────────────
 
@@ -293,7 +294,7 @@ function startGUI () {
     .cp-header-title{font-size:12px;color:#fff;letter-spacing:1px;flex:1}
     .cp-tab-bar{display:flex;background:rgba(0,0,0,0.82);border-left:1px solid rgba(255,255,255,0.12);
       border-right:1px solid rgba(255,255,255,0.12)}
-    .cp-tab{flex:1;padding:6px 4px;text-align:center;font-size:10px;color:#666;
+    .cp-tab{flex:1;padding:6px 4px;text-align:center;font-size:13px;color:#666;
       cursor:pointer;border-bottom:2px solid transparent;transition:color 0.15s}
     .cp-tab:hover{color:#aaa}
     .cp-tab.active{color:#4af;border-bottom-color:#4af}
@@ -325,7 +326,7 @@ function startGUI () {
     @media (max-width: 600px) {
       #ctrl-panel{left:0;right:0;top:auto;bottom:0;width:100%;border-radius:0}
       .cp-header{border-radius:0!important}
-      .cp-pane{border-radius:0!important;max-height:50vh;overflow-y:auto}
+      .cp-pane{border-radius:0!important;max-height:calc(33vh - 60px);overflow-y:auto;-webkit-overflow-scrolling:touch}
       .sp-sl{min-height:28px}
     }
     `;
@@ -487,42 +488,14 @@ function startGUI () {
         function(v){ config.CURL = v; });
     makeSlider(globalPane, 'Splat Radius', 0.01, 1.0, config.SPLAT_RADIUS, 0.01, 2,
         function(v){ config.SPLAT_RADIUS = v; });
-    makeSlider(globalPane, 'Blend Strength', 0, 1.0, config.BLEND_RADIUS, 0.01, 2,
-        function(v){ config.BLEND_RADIUS = v; updateLUTPreview(); });
-    makeSlider(globalPane, 'Drag Force', 0, 12000, config.DRAG_FORCE, 100, 0,
+    makeSlider(globalPane, 'Color Drag Force', 0, 12000, config.DRAG_FORCE, 100, 0,
         function(v){ config.DRAG_FORCE = v; });
+    makeCheckbox(globalPane, 'Random Color Drag', config.COLORFUL, function(v){ config.COLORFUL = v; });
+    makeSlider(globalPane, 'Color Change Rate', 0.1, 10.0, config.COLOR_UPDATE_SPEED, 0.1, 1,
+        function(v){ config.COLOR_UPDATE_SPEED = v; });
     makeCheckbox(globalPane, 'Shading', config.SHADING, function(v){ config.SHADING = v; updateKeywords(); });
-    makeCheckbox(globalPane, 'Colorful', config.COLORFUL, function(v){ config.COLORFUL = v; });
-
-    makeSec(globalPane, 'Capture');
-    // Background color — simple hex input
-    var bgRow = document.createElement('div'); bgRow.className = 'cp-row';
-    var bgLbl = document.createElement('span'); bgLbl.className = 'cp-lbl'; bgLbl.textContent = 'BG Color';
-    var bgInput = document.createElement('input');
-    bgInput.type = 'color'; bgInput.value = '#000000';
-    bgInput.style.cssText = 'width:100%;height:22px;border:none;background:none;cursor:pointer;padding:0';
-    bgInput.addEventListener('input', function() {
-        var hex = bgInput.value;
-        config.BACK_COLOR = {
-            r: parseInt(hex.slice(1,3),16),
-            g: parseInt(hex.slice(3,5),16),
-            b: parseInt(hex.slice(5,7),16)
-        };
-    });
-    bgInput.addEventListener('change', function() {
-        var hex = bgInput.value;
-        config.BACK_COLOR = {
-            r: parseInt(hex.slice(1,3),16),
-            g: parseInt(hex.slice(3,5),16),
-            b: parseInt(hex.slice(5,7),16)
-        };
-    });
-    bgInput.addEventListener('mousedown', function(e){ e.stopPropagation(); });
-    var bgSp = document.createElement('span');
-    bgRow.appendChild(bgLbl); bgRow.appendChild(bgInput); bgRow.appendChild(bgSp);
-    globalPane.appendChild(bgRow);
-
-    makeCheckbox(globalPane, 'Transparent', config.TRANSPARENT, function(v){ config.TRANSPARENT = v; });
+    makeSlider(globalPane, 'Shading Intensity', 0.0, 1.0, config.SHADING_INTENSITY, 0.05, 2,
+        function(v){ config.SHADING_INTENSITY = v; });
 
     makeSec(globalPane, 'Bloom');
     makeCheckbox(globalPane, 'Bloom Enabled', config.BLOOM, function(v){ config.BLOOM = v; updateKeywords(); });
@@ -945,8 +918,7 @@ function buildLUTPreviewUI() {
         ctx.font = '9px monospace';
         ctx.fillText('Hue A →', 2, 255);
         // Show current resolution
-        info.textContent = 'LUT ' + config.LUT_RESOLUTION + 'x' + config.LUT_RESOLUTION +
-                          '  ·  blend: ' + config.BLEND_RADIUS.toFixed(2);
+        info.textContent = 'LUT ' + config.LUT_RESOLUTION + 'x' + config.LUT_RESOLUTION;
     };
 }
 
@@ -1076,6 +1048,7 @@ const displayShaderSource = `
     uniform sampler2D uLUT;
     uniform vec2 ditherScale;
     uniform vec2 texelSize;
+    uniform float uShadingIntensity;
 
     vec3 linearToGamma (vec3 color) {
         color = max(color, vec3(0));
@@ -1221,7 +1194,7 @@ const displayShaderSource = `
         vec3 l = vec3(0.0, 0.0, 1.0);
 
         float diffuse = clamp(dot(n, l) + 0.7, 0.7, 1.0);
-        c *= diffuse;
+        c *= mix(1.0, diffuse, uShadingIntensity);
     #endif
 
     #ifdef BLOOM
@@ -1650,93 +1623,6 @@ const advectionShader = compileShader(gl.FRAGMENT_SHADER, `
     null
 );
 
-const hueDiffuseShader = compileShader(gl.FRAGMENT_SHADER, `
-    precision highp float;
-    precision highp sampler2D;
-
-    varying vec2 vUv;
-    varying vec2 vL;
-    varying vec2 vR;
-    varying vec2 vT;
-    varying vec2 vB;
-    uniform sampler2D uTexture;
-    uniform sampler2D uLUT;       // subtractive color mix LUT (hueA x hueB -> result)
-    uniform float uBlendStrength;
-    uniform float uLUTResolution; // number of hue steps in LUT (controls "blur")
-
-    // Recover RYB-stored hue from SC vector (0-1)
-    float scToHue (vec2 sc) {
-        return mod(atan(sc.x, sc.y) / 6.28318530718 + 1.0, 1.0);
-    }
-
-    void main () {
-        vec4 self = texture2D(uTexture, vUv);
-
-        // Only blend vivid pixels
-        if (self.a < 0.02 || self.b < 0.02) {
-            gl_FragColor = self;
-            return;
-        }
-
-        vec4 L = texture2D(uTexture, vL);
-        vec4 R = texture2D(uTexture, vR);
-        vec4 T = texture2D(uTexture, vT);
-        vec4 B = texture2D(uTexture, vB);
-
-        float wL = L.a * L.b;
-        float wR = R.a * R.b;
-        float wT = T.a * T.b;
-        float wB = B.a * B.b;
-        float wNeighbor = wL + wR + wT + wB;
-
-        if (wNeighbor < 0.001) {
-            gl_FragColor = self;
-            return;
-        }
-
-        // Weighted neighbor SC
-        vec2 neighborSC = (L.rg * wL + R.rg * wR + T.rg * wT + B.rg * wB)
-                        / wNeighbor;
-        float neighborMag = length(neighborSC);
-        if (neighborMag < 0.01) { gl_FragColor = self; return; }
-
-        // How different are the hues?
-        float selfMag = length(self.rg);
-        if (selfMag < 0.01) { gl_FragColor = self; return; }
-        float hueDiff = 1.0 - dot(self.rg / selfMag, neighborSC / neighborMag);
-
-        // Blend rate scales with difference — stronger at boundaries
-        float rate = uBlendStrength * (0.2 + hueDiff * 3.0);
-        rate = min(rate, 1.0);
-
-        // Get self hue and neighbor hue (both in RYB storage space, 0-1)
-        float selfHue     = scToHue(self.rg);
-        float neighborHue = scToHue(neighborSC);
-
-        // Quantize hues to LUT resolution — lower blend strength = coarser LUT
-        // meaning colors stay more distinct (fewer intermediate samples)
-        float lutStep = 1.0 / uLUTResolution;
-        float qSelf     = floor(selfHue     / lutStep + 0.5) * lutStep;
-        float qNeighbor = floor(neighborHue / lutStep + 0.5) * lutStep;
-
-        // Sample LUT: x = selfHue, y = neighborHue -> result color
-        // Result stored as (sinH, cosH, sat) in RGB channels, mix amount in A
-        vec4 lutResult = texture2D(uLUT, vec2(qSelf, qNeighbor));
-
-        // LUT encodes sin/cos as 0-1 (was 0-255 UNSIGNED_BYTE, auto-normalized by GL)
-        // Decode: 0.5 maps to 0, 0=−1, 1=+1
-        vec2 targetSC  = lutResult.rg * 2.0 - 1.0;
-        float targetSat = lutResult.b;   // saturation 0-1
-
-        // Blend current pixel toward LUT result by rate
-        vec2 newSC  = mix(self.rg,  targetSC  * selfMag, rate);
-        float newSat = mix(self.b,   targetSat,           rate * hueDiff);
-        newSat = max(newSat, 0.0);
-
-        gl_FragColor = vec4(newSC, newSat, self.a);
-    }
-`);
-
 const divergenceShader = compileShader(gl.FRAGMENT_SHADER, `
     precision mediump float;
     precision mediump sampler2D;
@@ -1926,7 +1812,6 @@ const sunraysProgram         = new Program(baseVertexShader, sunraysShader);
 const splatProgram           = new Program(baseVertexShader, splatShader);
 const dyeSplatProgram        = new Program(baseVertexShader, dyeSplatShader);
 const advectionProgram       = new Program(baseVertexShader, advectionShader);
-const hueDiffuseProgram      = new Program(baseVertexShader, hueDiffuseShader);
 const divergenceProgram      = new Program(baseVertexShader, divergenceShader);
 const curlProgram            = new Program(baseVertexShader, curlShader);
 const vorticityProgram       = new Program(baseVertexShader, vorticityShader);
@@ -2263,25 +2148,6 @@ function step (dt) {
     // Hue diffusion pass — blends hue between neighboring dye pixels.
     // Runs after advection so it acts on already-moved dye.
     // Strength 0 = sharp color boundaries, 1 = maximum blending.
-    if (config.BLEND_RADIUS > 0.0 && lutTexture) {
-        gl.disable(gl.BLEND);
-        hueDiffuseProgram.bind();
-        gl.uniform2f(hueDiffuseProgram.uniforms.texelSize, dye.texelSizeX, dye.texelSizeY);
-        gl.uniform1f(hueDiffuseProgram.uniforms.uLUTResolution, config.LUT_RESOLUTION);
-        // Bind LUT texture to unit 1
-        gl.activeTexture(gl.TEXTURE1);
-        gl.bindTexture(gl.TEXTURE_2D, lutTexture);
-        gl.uniform1i(hueDiffuseProgram.uniforms.uLUT, 1);
-        var blendPasses = Math.max(1, Math.round(config.BLEND_RADIUS * 8));
-        var passStrength = config.BLEND_RADIUS / blendPasses;
-        gl.uniform1f(hueDiffuseProgram.uniforms.uBlendStrength, passStrength);
-        for (var bp = 0; bp < blendPasses; bp++) {
-            gl.uniform1i(hueDiffuseProgram.uniforms.uTexture, dye.read.attach(0));
-            blit(dye.write);
-            dye.swap();
-        }
-    }
-
 }
 
 function render (target) {
@@ -2336,6 +2202,7 @@ function drawDisplay (target) {
     displayMaterial.bind();
     if (config.SHADING)
         gl.uniform2f(displayMaterial.uniforms.texelSize, 1.0 / width, 1.0 / height);
+    gl.uniform1f(displayMaterial.uniforms.uShadingIntensity, config.SHADING ? config.SHADING_INTENSITY : 0.0);
     gl.uniform1i(displayMaterial.uniforms.uTexture, dye.read.attach(0));
     if (config.BLOOM) {
         gl.uniform1i(displayMaterial.uniforms.uBloom, bloom.attach(1));
@@ -2705,24 +2572,28 @@ function starUpdate(dt) {
     if (!STARS || !STARS.length) return;
     STAR_TICK++;
 
+    // Stagger rays across 2 frames — fire half each frame.
+    // The fluid fills gaps via advection so halving per-frame splats is imperceptible.
+    var RAYS = 8;
+    var RAYS_PER_FRAME = 4; // half the ring per frame
+    var rayOffset = (STAR_TICK % 2) * RAYS_PER_FRAME;
+
     STARS.forEach(function(star) {
         var pulse = 1.0;
         if (star.pulseHz > 0)
             pulse = 0.5 + 0.5 * Math.sin(2 * Math.PI * star.pulseHz * STAR_TICK * dt + star.phase);
 
         var emitForce = star.emitForce * pulse;
-        // ── Outward emission ──────────────────────────────────────────────
-        // Dye buffer stores (sinH, cosH, sat, val). Star emits its hue
-        // encoded as a unit vector, with additive value accumulation.
         var emitH = (star.h === 0) ? 0.001 : star.h;
-        var RAYS = 12;
-        var frameAngle = (STAR_TICK % RAYS) * (2 * Math.PI / RAYS / RAYS);
-        for (var i = 0; i < RAYS; i++) {
+
+        // ── Outward emission — fire half the rays each frame ──────────────
+        var frameAngle = (STAR_TICK % RAYS) * (2 * Math.PI / RAYS / RAYS) + (star.rotation || 0);
+        for (var i = rayOffset; i < rayOffset + RAYS_PER_FRAME; i++) {
             var angle = frameAngle + 2 * Math.PI * i / RAYS;
             var cos = Math.cos(angle);
             var sin = Math.sin(angle);
 
-            var ir = star.emitRadius * 0.3;
+            var ir = star.emitRadius * 0.55;
             var ix = star.x + cos * ir;
             var iy = star.y + sin * ir;
             if (ix >= 0.01 && ix <= 0.99 && iy >= 0.01 && iy <= 0.99) {
@@ -2730,7 +2601,7 @@ function starUpdate(dt) {
                     { h: emitH, s: star.s, v: 0.15 * pulse });
             }
 
-            var or2 = star.emitRadius * 0.8;
+            var or2 = star.emitRadius * 0.75;
             var ox2 = star.x + cos * or2;
             var oy2 = star.y + sin * or2;
             if (ox2 >= 0.01 && ox2 <= 0.99 && oy2 >= 0.01 && oy2 <= 0.99) {
@@ -2739,20 +2610,22 @@ function starUpdate(dt) {
             }
         }
 
-        // ── Gravity: inward pull ──────────────────────────────────────────────
-        var GSAMP = 12;
-        var gAngleOff = (STAR_TICK * 7) % (GSAMP * 100) / 100 * (2*Math.PI/GSAMP);
-        for (var j = 0; j < GSAMP; j++) {
-            var ga = gAngleOff + 2 * Math.PI * j / GSAMP;
-            var cosg = Math.cos(ga), sing = Math.sin(ga);
-            var gd = star.gravRadius * (0.5 + 0.3 * ((j * 0.618) % 1));
-            var gx = star.x + cosg * gd;
-            var gy = star.y + sing * gd;
-            if (gx >= 0.01 && gx <= 0.99 && gy >= 0.01 && gy <= 0.99) {
-                splat(gx, gy,
-                    -cosg * star.gravForce,
-                    -sing * star.gravForce,
-                    null, true); // velocity-only, skip dye pass entirely
+        // ── Gravity: inward pull — skip entirely when gravForce is zero ───
+        if (star.gravForce > 0) {
+            var GSAMP = 6;
+            var gAngleOff = (STAR_TICK * 7) % (GSAMP * 100) / 100 * (2*Math.PI/GSAMP);
+            for (var j = 0; j < GSAMP; j++) {
+                var ga = gAngleOff + 2 * Math.PI * j / GSAMP;
+                var cosg = Math.cos(ga), sing = Math.sin(ga);
+                var gd = star.gravRadius * (0.5 + 0.3 * ((j * 0.618) % 1));
+                var gx = star.x + cosg * gd;
+                var gy = star.y + sing * gd;
+                if (gx >= 0.01 && gx <= 0.99 && gy >= 0.01 && gy <= 0.99) {
+                    splat(gx, gy,
+                        -cosg * star.gravForce,
+                        -sing * star.gravForce,
+                        null, true);
+                }
             }
         }
     });
@@ -2813,6 +2686,7 @@ canvas.addEventListener('mousemove', function(e) {
 canvas.addEventListener('mouseup', function(e) {
     if (e.button !== 0 || !_starDown || _starDrag) { _starDown = null; return; }
     if (starPanelHit(e.clientX, e.clientY)) { _starDown = null; return; }
+    if (window._moveSelected) { _starDown = null; return; } // selection consumed this tap
     // Use getBoundingClientRect so coords are correct even when canvas is CSS-scaled
     var rect = canvas.getBoundingClientRect();
     var x = (e.clientX - rect.left) / rect.width;
@@ -2850,6 +2724,8 @@ canvas.addEventListener('touchstart', function(e) {
     if (e.targetTouches.length !== 1) return;
     var t = e.targetTouches[0];
     if (starPanelHit(t.clientX, t.clientY)) return;
+    // If _movePointerDown consumed this (object hit), don't start placement timer
+    if (window._moveSelected) return;
     _touchMoved = false;
     _touchPlaceId = t.identifier;
     _touchPlaceTimer = setTimeout(function() {
@@ -2929,7 +2805,8 @@ function starPlace(x, y) {
         gravForce:  starGetVal('s-grav',  0),
         gravRadius: starGetVal('s-grad',  0.2),
         pulseHz:    starGetVal('s-pulse', 0),
-        phase:      Math.random() * Math.PI * 2
+        phase:      Math.random() * Math.PI * 2,
+        rotation:   0
     });
     starDrawDots();
 }
@@ -2978,6 +2855,197 @@ function _dotResize() {
 _dotResize();
 window.addEventListener('resize', _dotResize);
 
+// ── Selection / Move / Rotate (always-on) ───────────────────────────────
+// No mode button needed — clicking an object selects it directly.
+window._moveSelected = null; // { obj, type:'star'|'fan', dragMode:'move'|'rotate'|null, startAngle, copyTimer }
+
+var MOVE_SELECT_RADIUS_PX = 14;  // px — tap within this to select
+var MOVE_RING_INNER_PX    = 18;  // inner edge of rotate ring
+var MOVE_RING_OUTER_PX    = 34;  // outer edge of rotate ring
+
+function _moveHitTest(cx, cy) {
+    var W = _dotCanvas.width, H = _dotCanvas.height;
+    var best = null, bestD = MOVE_RING_OUTER_PX; // allow hits anywhere inside outer ring
+    STARS.forEach(function(s) {
+        var sx = s.x * W, sy = (1 - s.y) * H;
+        var d = Math.hypot(cx - sx, cy - sy);
+        if (d < bestD) { bestD = d; best = { obj: s, type: 'star' }; }
+    });
+    FANS.forEach(function(f) {
+        var fx = f.x * W, fy = (1 - f.y) * H;
+        var d = Math.hypot(cx - fx, cy - fy);
+        if (d < bestD) { bestD = d; best = { obj: f, type: 'fan' }; }
+    });
+    return best;
+}
+
+function _moveGetDragMode(cx, cy, obj) {
+    var W = _dotCanvas.width, H = _dotCanvas.height;
+    var ox = obj.x * W, oy = (1 - obj.y) * H;
+    var d = Math.hypot(cx - ox, cy - oy);
+    if (d <= MOVE_RING_INNER_PX) return 'move';
+    if (d <= MOVE_RING_OUTER_PX) return 'rotate';
+    return 'move'; // fallback
+}
+
+function _copySelected() {
+    var sel = window._moveSelected;
+    if (!sel) return;
+    var o = sel.obj;
+    if (sel.type === 'star') {
+        STARS.push({
+            x: o.x, y: o.y,
+            h: o.h, s: o.s, v: o.v,
+            emitForce: o.emitForce, emitRadius: o.emitRadius,
+            gravForce: o.gravForce, gravRadius: o.gravRadius,
+            pulseHz: o.pulseHz, phase: Math.random() * Math.PI * 2,
+            rotation: o.rotation || 0
+        });
+    } else {
+        FANS.push({
+            x: o.x, y: o.y,
+            angle: o.angle, force: o.force,
+            radius: o.radius, spread: o.spread,
+            pulseHz: o.pulseHz, phase: Math.random() * Math.PI * 2
+        });
+    }
+    starDrawDots();
+}
+
+function _movePointerDown(cx, cy) {
+    // If something already selected, check if tap is inside its ring (move/rotate)
+    // or outside (deselect). Copy timer starts for any press on selected object.
+    if (window._moveSelected) {
+        var sel = window._moveSelected;
+        var W = _dotCanvas.width, H = _dotCanvas.height;
+        var ox = sel.obj.x * W, oy = (1 - sel.obj.y) * H;
+        var d = Math.hypot(cx - ox, cy - oy);
+        if (d <= MOVE_RING_OUTER_PX) {
+            // Press inside ring — start move/rotate + copy timer
+            sel.dragMode = _moveGetDragMode(cx, cy, sel.obj);
+            sel.startAngle = Math.atan2(cy - oy, cx - ox);
+            sel.hasMoved = false;
+            sel.copyTimer = setTimeout(function() {
+                sel.copyTimer = null;
+                if (!sel.hasMoved) _copySelected();
+            }, 1000);
+            return true; // consumed
+        } else {
+            // Tap outside ring — check if hitting a different object
+            var hit = _moveHitTest(cx, cy);
+            if (hit && hit.obj !== sel.obj) {
+                if (sel.copyTimer) { clearTimeout(sel.copyTimer); sel.copyTimer = null; }
+                var W2 = _dotCanvas.width, H2 = _dotCanvas.height;
+                var ox2 = hit.obj.x * W2, oy2 = (1 - hit.obj.y) * H2;
+                window._moveSelected = {
+                    obj: hit.obj, type: hit.type,
+                    dragMode: _moveGetDragMode(cx, cy, hit.obj),
+                    startAngle: Math.atan2(cy - oy2, cx - ox2),
+                    hasMoved: false, copyTimer: null
+                };
+                starDrawDots();
+                return true;
+            }
+            // Tap on empty canvas — deselect, consume the tap
+            if (sel.copyTimer) { clearTimeout(sel.copyTimer); sel.copyTimer = null; }
+            window._moveSelected = null;
+            starDrawDots();
+            return true; // consumed — prevent placement on this tap
+        }
+    }
+
+    // Nothing selected — check if tapping an object to select it
+    var hit = _moveHitTest(cx, cy);
+    if (!hit) return false; // let placement proceed
+    var W = _dotCanvas.width, H = _dotCanvas.height;
+    var ox = hit.obj.x * W, oy = (1 - hit.obj.y) * H;
+    window._moveSelected = {
+        obj: hit.obj, type: hit.type,
+        dragMode: _moveGetDragMode(cx, cy, hit.obj),
+        startAngle: Math.atan2(cy - oy, cx - ox),
+        hasMoved: false, copyTimer: null
+    };
+    // Start copy timer immediately on selection too
+    var newSel = window._moveSelected;
+    newSel.copyTimer = setTimeout(function() {
+        newSel.copyTimer = null;
+        if (!newSel.hasMoved) _copySelected();
+    }, 1000);
+    starDrawDots();
+    return true; // consumed — don't place a new object
+}
+
+function _movePointerMove(cx, cy) {
+    if (!window._moveSelected || !window._moveSelected.dragMode) return false;
+    var sel = window._moveSelected;
+    var W = _dotCanvas.width, H = _dotCanvas.height;
+
+    // Cancel copy timer if the user moves
+    if (!sel.hasMoved) {
+        sel.hasMoved = true;
+        if (sel.copyTimer) { clearTimeout(sel.copyTimer); sel.copyTimer = null; }
+    }
+
+    if (sel.dragMode === 'move') {
+        sel.obj.x = Math.max(0.01, Math.min(0.99, cx / W));
+        sel.obj.y = Math.max(0.01, Math.min(0.99, 1 - cy / H));
+    } else if (sel.dragMode === 'rotate') {
+        var ox = sel.obj.x * W, oy = (1 - sel.obj.y) * H;
+        var angle = Math.atan2(cy - oy, cx - ox);
+        var delta = angle - sel.startAngle;
+        sel.startAngle = angle;
+        if (sel.type === 'star') {
+            sel.obj.rotation = ((sel.obj.rotation || 0) - delta) % (Math.PI * 2);
+        } else {
+            sel.obj.angle = ((sel.obj.angle - delta * 180 / Math.PI) % 360 + 360) % 360;
+            var fSlider = document.getElementById('f-angle');
+            if (fSlider) { fSlider.value = Math.round(sel.obj.angle); var fv = document.getElementById('f-angle-v'); if(fv) fv.textContent = Math.round(sel.obj.angle); }
+        }
+    }
+    starDrawDots();
+    return true;
+}
+
+function _movePointerUp() {
+    if (!window._moveSelected) return;
+    if (window._moveSelected.copyTimer) {
+        clearTimeout(window._moveSelected.copyTimer);
+        window._moveSelected.copyTimer = null;
+    }
+    window._moveSelected.dragMode = null;
+}
+
+// Mouse handlers (capture phase — run before fluid drag and placement)
+canvas.addEventListener('mousedown', function(e) {
+    if (window.ERASER_ACTIVE) return;
+    if (e.button !== 0) return;
+    var consumed = _movePointerDown(e.clientX, e.clientY);
+    if (consumed) e.stopPropagation();
+}, true);
+window.addEventListener('mousemove', function(e) {
+    if (!window._moveSelected || !window._moveSelected.dragMode) return;
+    _movePointerMove(e.clientX, e.clientY);
+});
+window.addEventListener('mouseup', function() { _movePointerUp(); });
+
+// Touch handlers
+canvas.addEventListener('touchstart', function(e) {
+    if (window.ERASER_ACTIVE) return;
+    var t = e.touches[0];
+    var consumed = _movePointerDown(t.clientX, t.clientY);
+    if (consumed) e.stopPropagation();
+}, { passive: true });
+canvas.addEventListener('touchmove', function(e) {
+    if (!window._moveSelected || !window._moveSelected.dragMode) return;
+    e.preventDefault();
+    var t = e.touches[0];
+    _movePointerMove(t.clientX, t.clientY);
+}, { passive: false });
+canvas.addEventListener('touchend', function() { _movePointerUp(); }, { passive: true });
+// ── End selection/move/rotate ─────────────────────────────────────────────
+
+
+
 function starDrawDots() {
     var ctx = _dotCanvas.getContext('2d');
     var W = _dotCanvas.width, H = _dotCanvas.height;
@@ -2995,30 +3063,78 @@ function starDrawDots() {
         ctx.moveTo(sx-12,sy); ctx.lineTo(sx+12,sy);
         ctx.moveTo(sx,sy-12); ctx.lineTo(sx,sy+12);
         ctx.stroke();
+        // Draw rotation direction arrow (black, corrected for Y-flip)
+        if (s.rotation) {
+            var len = 13, headLen = 5;
+            var rx = Math.cos(s.rotation) * len;
+            var ry = -Math.sin(s.rotation) * len; // negate Y to match WebGL UV space
+            var ang = Math.atan2(ry, rx);
+            ctx.save();
+            ctx.translate(sx, sy);
+            // Shaft
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(rx, ry);
+            ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.lineWidth = 2; ctx.stroke();
+            // Arrowhead
+            ctx.beginPath();
+            ctx.moveTo(rx, ry);
+            ctx.lineTo(rx - headLen * Math.cos(ang - 0.4), ry - headLen * Math.sin(ang - 0.4));
+            ctx.moveTo(rx, ry);
+            ctx.lineTo(rx - headLen * Math.cos(ang + 0.4), ry - headLen * Math.sin(ang + 0.4));
+            ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.lineWidth = 2; ctx.stroke();
+            ctx.restore();
+        }
+        // Selection ring
+        if (window._moveSelected && window._moveSelected.obj === s) {
+            _drawSelectionRing(ctx, sx, sy);
+        }
     });
     // Draw fans as cyan diamonds with direction arrow
     FANS.forEach(function(f) {
         var fx = f.x * W;
         var fy = (1 - f.y) * H;
         var ar = f.angle * Math.PI / 180;
-        // Diamond shape
         ctx.save();
         ctx.translate(fx, fy);
-        ctx.rotate(-ar);  // negate: canvas Y is flipped vs texture Y
+        ctx.rotate(-ar);
         ctx.beginPath();
         ctx.moveTo(0, -10); ctx.lineTo(8, 0); ctx.lineTo(0, 10); ctx.lineTo(-8, 0);
         ctx.closePath();
         ctx.fillStyle = 'rgba(0,220,255,0.85)';
         ctx.fill();
         ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 1.5; ctx.stroke();
-        // Arrow showing direction
         ctx.beginPath();
         ctx.moveTo(0, 0); ctx.lineTo(16, 0);
         ctx.moveTo(16, 0); ctx.lineTo(11, -4);
         ctx.moveTo(16, 0); ctx.lineTo(11,  4);
         ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 1.5; ctx.stroke();
         ctx.restore();
+        // Selection ring
+        if (window._moveSelected && window._moveSelected.obj === f) {
+            _drawSelectionRing(ctx, fx, fy);
+        }
     });
+}
+
+function _drawSelectionRing(ctx, x, y) {
+    var ir = MOVE_RING_INNER_PX, or = MOVE_RING_OUTER_PX;
+    // Black dotted ring (offset slightly to create contrast)
+    ctx.save();
+    ctx.setLineDash([4, 4]);
+    ctx.lineDashOffset = 0;
+    ctx.beginPath(); ctx.arc(x, y, or, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(0,0,0,0.9)'; ctx.lineWidth = 2.5; ctx.stroke();
+    // White dotted ring offset by dash length
+    ctx.lineDashOffset = 4;
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 2.5; ctx.stroke();
+    // Inner ring (move zone boundary)
+    ctx.lineDashOffset = 0;
+    ctx.beginPath(); ctx.arc(x, y, ir, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.lineDashOffset = 3;
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.restore();
 }
 
 // ── Star + Fan tab injection ───────────────────────────────────────────────
@@ -3127,7 +3243,7 @@ function starDrawDots() {
 
         var starDefs = [
             {id:'s-force', lbl:'Emit Force',   mn:0,   mx:100,  v:30,   st:1,    dp:0},
-            {id:'s-rad',   lbl:'Emit Radius',  mn:0.005,mx:0.3,  v:0.05, st:0.005,dp:3},
+            {id:'s-rad',   lbl:'Emit Radius',  mn:0.005,mx:0.12, v:0.05, st:0.005,dp:3},
             {id:'s-grav',  lbl:'Gravity Force',mn:0,   mx:800,  v:0,    st:10,   dp:0},
             {id:'s-grad',  lbl:'Gravity Radius',mn:0.01,mx:0.5, v:0.2,  st:0.01, dp:2},
             {id:'s-pulse', lbl:'Pulse Hz',     mn:0,   mx:10,   v:0,    st:0.1,  dp:1},
@@ -3144,6 +3260,12 @@ function starDrawDots() {
             sl.addEventListener('mousedown', function(e) { e.stopPropagation(); });
             row.appendChild(lbl); row.appendChild(sl); row.appendChild(val);
             starPane.appendChild(row);
+            if (def.id === 's-rad') {
+                var hint = document.createElement('div');
+                hint.style.cssText = 'font-size:9px;color:#4af;margin-top:-2px;margin-bottom:3px;padding-left:2px';
+                hint.textContent = '▲ min = single direction emit';
+                starPane.appendChild(hint);
+            }
         });
 
         // Buttons
@@ -3154,11 +3276,12 @@ function starDrawDots() {
         var clrDyeBtn = document.createElement('button');
         clrDyeBtn.className = 'sp-btn'; clrDyeBtn.textContent = 'Clear Dye';
         clrDyeBtn.addEventListener('click', function(e) { e.stopPropagation(); clearDye(); });
+        var moveBtn = null; // Move/Rotate is now always-on, no button needed
         btnDiv.appendChild(clrBtn); btnDiv.appendChild(clrDyeBtn);
         starPane.appendChild(btnDiv);
 
         var tip = document.createElement('div'); tip.className = 'sp-tip';
-        tip.textContent = 'Click canvas = place star  |  Right-click = remove';
+        tip.textContent = 'Tap canvas = place  |  Tap object = select  |  Drag center = move  |  Drag ring = rotate  |  Hold 1s = copy';
         starPane.appendChild(tip);
 
         // ── FANS pane ──────────────────────────────────────────────────────
@@ -3235,12 +3358,18 @@ function starDrawDots() {
             canvas.style.cursor = '';
             eraserCursor.style.display = 'none';
         }
+        function deactivateMoveRotate() {
+            if (!window._moveSelected) return;
+            if (window._moveSelected.copyTimer) { clearTimeout(window._moveSelected.copyTimer); }
+            window._moveSelected = null;
+            starDrawDots();
+        }
         var ctrlPanel = document.getElementById('ctrl-panel');
         if (ctrlPanel) {
-            ctrlPanel.addEventListener('click',       function(e){ e.stopPropagation(); deactivateEraser(); });
+            ctrlPanel.addEventListener('click',       function(e){ e.stopPropagation(); deactivateEraser(); deactivateMoveRotate(); });
             ctrlPanel.addEventListener('contextmenu', function(e){ e.stopPropagation(); e.preventDefault(); });
             ctrlPanel.addEventListener('mousedown',   function(e){ e.stopPropagation(); }, false);
-            ctrlPanel.addEventListener('touchstart',  function(e){ deactivateEraser(); }, { passive: true });
+            ctrlPanel.addEventListener('touchstart',  function(e){ deactivateEraser(); deactivateMoveRotate(); }, { passive: true });
         }
     }
     inject();
