@@ -290,7 +290,7 @@ function startGUI () {
       font-size:11px;color:#ccc;z-index:10000;user-select:none}
     #ctrl-panel *{box-sizing:border-box}
     .cp-header{background:rgba(0,0,0,0.88);border:1px solid rgba(255,255,255,0.12);
-      border-radius:8px 8px 0 0;padding:8px 12px;display:flex;align-items:center;gap:8px}
+      border-radius:8px 8px 0 0;padding:6px 8px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
     .cp-header-title{font-size:12px;color:#fff;letter-spacing:1px;flex:1}
     .cp-tab-bar{display:flex;background:rgba(0,0,0,0.82);border-left:1px solid rgba(255,255,255,0.12);
       border-right:1px solid rgba(255,255,255,0.12)}
@@ -339,19 +339,6 @@ function startGUI () {
     // Header
     var header = document.createElement('div');
     header.className = 'cp-header';
-    var htitle = document.createElement('span');
-    htitle.className = 'cp-header-title';
-    htitle.textContent = 'FLUID SIM';
-    var hbtn = document.createElement('button');
-    hbtn.className = 'cp-btn';
-    hbtn.style.margin = '0';
-    hbtn.textContent = 'Close Controls ▲';
-    var panelOpen = true;
-    hbtn.addEventListener('click', function() {
-        panelOpen = !panelOpen;
-        panel.classList.toggle('cp-hidden', !panelOpen);
-        hbtn.textContent = panelOpen ? 'Close Controls ▲' : 'Open Controls ▼';
-    });
 
     // Eraser button
     var eraserBtn = document.createElement('button');
@@ -370,8 +357,43 @@ function startGUI () {
         if (!window.ERASER_ACTIVE) eraserCursor.style.display = 'none';
     });
 
-    header.appendChild(htitle);
+    // Clear Stars/Fans button (header)
+    var hClrStarsBtn = document.createElement('button');
+    hClrStarsBtn.className = 'cp-btn';
+    hClrStarsBtn.style.margin = '0';
+    hClrStarsBtn.textContent = 'Clear Stars';
+    hClrStarsBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        STARS.length = 0; FANS.length = 0;
+        window._moveSelected = null;
+        starDrawDots();
+    });
+
+    // Clear Dye button (header)
+    var hClrDyeBtn = document.createElement('button');
+    hClrDyeBtn.className = 'cp-btn';
+    hClrDyeBtn.style.margin = '0';
+    hClrDyeBtn.textContent = 'Clear Dye';
+    hClrDyeBtn.addEventListener('click', function(e) { e.stopPropagation(); clearDye(); });
+
+    // Open/Close button pushed right with spacer
+    var hSpacer = document.createElement('span');
+    hSpacer.style.flex = '1';
+    var hbtn = document.createElement('button');
+    hbtn.className = 'cp-btn';
+    hbtn.style.margin = '0';
+    hbtn.textContent = 'Close Controls ▲';
+    var panelOpen = true;
+    hbtn.addEventListener('click', function() {
+        panelOpen = !panelOpen;
+        panel.classList.toggle('cp-hidden', !panelOpen);
+        hbtn.textContent = panelOpen ? 'Close Controls ▲' : 'Open Controls ▼';
+    });
+
     header.appendChild(eraserBtn);
+    header.appendChild(hClrStarsBtn);
+    header.appendChild(hClrDyeBtn);
+    header.appendChild(hSpacer);
     header.appendChild(hbtn);
     panel.appendChild(header);
 
@@ -2949,6 +2971,7 @@ function _movePointerDown(cx, cy) {
                     startAngle: Math.atan2(cy - oy2, cx - ox2),
                     hasMoved: false, copyTimer: null
                 };
+                _onSelectionChanged(window._moveSelected);
                 starDrawDots();
                 return true;
             }
@@ -2956,6 +2979,7 @@ function _movePointerDown(cx, cy) {
             if (sel.copyTimer) { clearTimeout(sel.copyTimer); sel.copyTimer = null; }
             window._moveSelected = null;
             window._justDeselected = true;
+            _onSelectionChanged(null);
             starDrawDots();
             return true; // consumed — prevent placement on this tap
         }
@@ -2978,8 +3002,24 @@ function _movePointerDown(cx, cy) {
         newSel.copyTimer = null;
         if (!newSel.hasMoved) _copySelected();
     }, 1000);
+    _onSelectionChanged(window._moveSelected);
     starDrawDots();
     return true; // consumed — don't place a new object
+}
+
+function _onSelectionChanged(sel) {
+    if (!sel) {
+        if (window._clearStarPanelStatus) window._clearStarPanelStatus();
+        if (window._clearFanPanelStatus) window._clearFanPanelStatus();
+        return;
+    }
+    if (sel.type === 'star') {
+        if (window._syncStarPanel) window._syncStarPanel(sel.obj);
+        if (window._clearFanPanelStatus) window._clearFanPanelStatus();
+    } else {
+        if (window._syncFanPanel) window._syncFanPanel(sel.obj);
+        if (window._clearStarPanelStatus) window._clearStarPanelStatus();
+    }
 }
 
 function _movePointerMove(cx, cy) {
@@ -3231,6 +3271,8 @@ function _drawSelectionRing(ctx, x, y) {
                 swatch.style.background = 'rgb('+rgb[0]+','+rgb[1]+','+rgb[2]+')';
                 var hsv = RGBtoHSV(rgb[0]/255, rgb[1]/255, rgb[2]/255);
                 hueSpanR.textContent = isWhite ? 'White' : Math.round(hsv.h * 360) + '\u00b0';
+                var sel = window._moveSelected;
+                if (sel && sel.type === 'star') { sel.obj.h = hsv.h; sel.obj.s = hsv.s; sel.obj.v = hsv.v; starDrawDots(); }
             });
             sw.addEventListener('touchend', function(e) {
                 e.stopPropagation();
@@ -3239,6 +3281,8 @@ function _drawSelectionRing(ctx, x, y) {
                 swatch.style.background = 'rgb('+rgb[0]+','+rgb[1]+','+rgb[2]+')';
                 var hsv = RGBtoHSV(rgb[0]/255, rgb[1]/255, rgb[2]/255);
                 hueSpanR.textContent = isWhite ? 'White' : Math.round(hsv.h * 360) + '\u00b0';
+                var sel = window._moveSelected;
+                if (sel && sel.type === 'star') { sel.obj.h = hsv.h; sel.obj.s = hsv.s; sel.obj.v = hsv.v; starDrawDots(); }
             });
             presetRow.appendChild(sw);
         });
@@ -3248,12 +3292,17 @@ function _drawSelectionRing(ctx, x, y) {
         var psec = document.createElement('div'); psec.className = 'sp-sec'; psec.textContent = 'PARAMETERS';
         starPane.appendChild(psec);
 
+        // Status label — shows whether editing selected object or setting defaults
+        var starStatus = document.createElement('div');
+        starStatus.style.cssText = 'font-size:9px;color:#4af;margin-bottom:4px;min-height:12px';
+        starPane.appendChild(starStatus);
+
         var starDefs = [
-            {id:'s-force', lbl:'Emit Force',   mn:0,   mx:100,  v:30,   st:1,    dp:0},
-            {id:'s-rad',   lbl:'Emit Radius',  mn:0.005,mx:0.12, v:0.05, st:0.005,dp:3},
-            {id:'s-grav',  lbl:'Gravity Force',mn:0,   mx:800,  v:0,    st:10,   dp:0},
-            {id:'s-grad',  lbl:'Gravity Radius',mn:0.01,mx:0.5, v:0.2,  st:0.01, dp:2},
-            {id:'s-pulse', lbl:'Pulse Hz',     mn:0,   mx:10,   v:0,    st:0.1,  dp:1},
+            {id:'s-force', lbl:'Emit Force',   mn:0,   mx:100,  v:30,   st:1,    dp:0, prop:'emitForce'},
+            {id:'s-rad',   lbl:'Emit Radius',  mn:0.005,mx:0.12, v:0.05, st:0.005,dp:3, prop:'emitRadius'},
+            {id:'s-grav',  lbl:'Gravity Force',mn:0,   mx:800,  v:0,    st:10,   dp:0, prop:'gravForce'},
+            {id:'s-grad',  lbl:'Gravity Radius',mn:0.01,mx:0.5, v:0.2,  st:0.01, dp:2, prop:'gravRadius'},
+            {id:'s-pulse', lbl:'Pulse Hz',     mn:0,   mx:10,   v:0,    st:0.1,  dp:1, prop:'pulseHz'},
         ];
         starDefs.forEach(function(def) {
             var row = document.createElement('div'); row.className = 'sp-row';
@@ -3263,7 +3312,12 @@ function _drawSelectionRing(ctx, x, y) {
             sl.min = def.mn; sl.max = def.mx; sl.value = def.v; sl.step = def.st;
             var val = document.createElement('span'); val.className = 'sp-val'; val.id = def.id+'-v';
             val.textContent = def.v.toFixed(def.dp);
-            sl.addEventListener('input', function() { val.textContent = parseFloat(sl.value).toFixed(def.dp); });
+            sl.addEventListener('input', function() {
+                val.textContent = parseFloat(sl.value).toFixed(def.dp);
+                // Live-edit selected star
+                var sel = window._moveSelected;
+                if (sel && sel.type === 'star') sel.obj[def.prop] = parseFloat(sl.value);
+            });
             sl.addEventListener('mousedown', function(e) { e.stopPropagation(); });
             row.appendChild(lbl); row.appendChild(sl); row.appendChild(val);
             starPane.appendChild(row);
@@ -3275,16 +3329,31 @@ function _drawSelectionRing(ctx, x, y) {
             }
         });
 
+        // Sync star sliders and color swatch to a newly selected star
+        window._syncStarPanel = function(star) {
+            if (!star) {
+                starStatus.textContent = '';
+                return;
+            }
+            starStatus.textContent = '✦ Editing selected star';
+            starDefs.forEach(function(def) {
+                var sl = document.getElementById(def.id);
+                var vl = document.getElementById(def.id + '-v');
+                if (sl) sl.value = star[def.prop];
+                if (vl) vl.textContent = parseFloat(star[def.prop]).toFixed(def.dp);
+            });
+            // Update color swatch to show star's color
+            var rgb = HSVtoRGB(star.h, star.s, star.v);
+            var r = Math.round(rgb.r*255), g = Math.round(rgb.g*255), b = Math.round(rgb.b*255);
+            STAR_PICK_RGB = {r: rgb.r, g: rgb.g, b: rgb.b};
+            swatch.style.background = 'rgb('+r+','+g+','+b+')';
+            var isWhite = star.s < 0.05;
+            hueSpanR.textContent = isWhite ? 'White' : Math.round(star.h * 360) + '\u00b0';
+        };
+        window._clearStarPanelStatus = function() { starStatus.textContent = ''; };
+
         // Buttons
         var btnDiv = document.createElement('div'); btnDiv.style.marginTop = '8px';
-        var clrBtn = document.createElement('button');
-        clrBtn.className = 'sp-btn'; clrBtn.textContent = 'Clear Stars';
-        clrBtn.addEventListener('click', function(e) { e.stopPropagation(); STARS.length = 0; starDrawDots(); });
-        var clrDyeBtn = document.createElement('button');
-        clrDyeBtn.className = 'sp-btn'; clrDyeBtn.textContent = 'Clear Dye';
-        clrDyeBtn.addEventListener('click', function(e) { e.stopPropagation(); clearDye(); });
-        var moveBtn = null; // Move/Rotate is now always-on, no button needed
-        btnDiv.appendChild(clrBtn); btnDiv.appendChild(clrDyeBtn);
         starPane.appendChild(btnDiv);
 
         var tip = document.createElement('div'); tip.className = 'sp-tip';
@@ -3295,11 +3364,16 @@ function _drawSelectionRing(ctx, x, y) {
         var fsec = document.createElement('div'); fsec.className = 'sp-sec'; fsec.textContent = 'PARAMETERS';
         fanPane.appendChild(fsec);
 
+        // Status label
+        var fanStatus = document.createElement('div');
+        fanStatus.style.cssText = 'font-size:9px;color:#4af;margin-bottom:4px;min-height:12px';
+        fanPane.appendChild(fanStatus);
+
         var fanDefs = [
-            {id:'f-angle',  lbl:'Direction°', mn:0,   mx:360,  v:0,    st:1,   dp:0},
-            {id:'f-force',  lbl:'Fan Force',  mn:0,   mx:1,    v:0.3,  st:0.01,dp:2},
-            {id:'f-grad',   lbl:'Radius',     mn:0.01,mx:0.4,  v:0.05, st:0.005,dp:3},
-            {id:'f-spread', lbl:'Spread°',    mn:5,   mx:180,  v:60,   st:5,   dp:0},
+            {id:'f-angle',  lbl:'Direction°', mn:0,   mx:360,  v:0,    st:1,   dp:0, prop:'angle'},
+            {id:'f-force',  lbl:'Fan Force',  mn:0,   mx:1,    v:0.3,  st:0.01,dp:2, prop:'force'},
+            {id:'f-grad',   lbl:'Radius',     mn:0.01,mx:0.4,  v:0.05, st:0.005,dp:3, prop:'radius'},
+            {id:'f-spread', lbl:'Spread°',    mn:5,   mx:180,  v:60,   st:5,   dp:0, prop:'spread'},
         ];
         fanDefs.forEach(function(def) {
             var row = document.createElement('div'); row.className = 'sp-row';
@@ -3309,12 +3383,32 @@ function _drawSelectionRing(ctx, x, y) {
             sl.min = def.mn; sl.max = def.mx; sl.value = def.v; sl.step = def.st;
             var val = document.createElement('span'); val.className = 'sp-val'; val.id = def.id+'-v';
             val.textContent = def.v.toFixed(def.dp);
-            sl.addEventListener('input', function() { val.textContent = parseFloat(sl.value).toFixed(def.dp); });
+            sl.addEventListener('input', function() {
+                val.textContent = parseFloat(sl.value).toFixed(def.dp);
+                // Live-edit selected fan
+                var sel = window._moveSelected;
+                if (sel && sel.type === 'fan') {
+                    sel.obj[def.prop] = parseFloat(sl.value);
+                    starDrawDots(); // redraw arrow direction live
+                }
+            });
             sl.addEventListener('mousedown', function(e) { e.stopPropagation(); });
             row.appendChild(lbl); row.appendChild(sl); row.appendChild(val);
             fanPane.appendChild(row);
         });
 
+        // Sync fan sliders to a newly selected fan
+        window._syncFanPanel = function(fan) {
+            if (!fan) { fanStatus.textContent = ''; return; }
+            fanStatus.textContent = '◈ Editing selected fan';
+            fanDefs.forEach(function(def) {
+                var sl = document.getElementById(def.id);
+                var vl = document.getElementById(def.id + '-v');
+                if (sl) sl.value = fan[def.prop];
+                if (vl) vl.textContent = parseFloat(fan[def.prop]).toFixed(def.dp);
+            });
+        };
+        window._clearFanPanelStatus = function() { fanStatus.textContent = ''; };
         var clrFanBtn = document.createElement('button');
         clrFanBtn.className = 'sp-btn'; clrFanBtn.textContent = 'Clear Fans';
         clrFanBtn.style.marginTop = '6px';
@@ -3322,7 +3416,7 @@ function _drawSelectionRing(ctx, x, y) {
         fanPane.appendChild(clrFanBtn);
 
         var fanTip = document.createElement('div'); fanTip.className = 'sp-tip';
-        fanTip.textContent = 'Click canvas = place fan  |  Right-click = remove';
+        fanTip.textContent = 'Tap canvas = place  |  Tap object = select  |  Drag center = move  |  Drag ring = rotate  |  Hold 1s = copy';
         fanPane.appendChild(fanTip);
 
         // ── Mode routing via active tab ────────────────────────────────────
@@ -3347,6 +3441,13 @@ function _drawSelectionRing(ctx, x, y) {
             STAR_PICK_RGB = {r: rgb.r, g: rgb.g, b: rgb.b};
             swatch.style.background = 'rgb('+Math.round(rgb.r*255)+','+Math.round(rgb.g*255)+','+Math.round(rgb.b*255)+')';
             hueSpanR.textContent = Math.round(t*360)+'°';
+            // Live-update selected star's color
+            var sel = window._moveSelected;
+            if (sel && sel.type === 'star') {
+                var hsv = RGBtoHSV(rgb.r, rgb.g, rgb.b);
+                sel.obj.h = hsv.h; sel.obj.s = hsv.s; sel.obj.v = hsv.v;
+                starDrawDots();
+            }
         }
         hueCanvas.addEventListener('mousedown', function(e) { hDrag=true; pickHue(e.clientX); e.stopPropagation(); });
         window.addEventListener('mousemove', function(e) { if(hDrag) pickHue(e.clientX); });
@@ -3367,18 +3468,25 @@ function _drawSelectionRing(ctx, x, y) {
             canvas.style.cursor = '';
             eraserCursor.style.display = 'none';
         }
-        function deactivateMoveRotate() {
+        function deactivateMoveRotate(sourceEvent) {
             if (!window._moveSelected) return;
+            // Don't deselect when interacting with panel content — only deselect
+            // if the click/touch is on the header or tab bar, not sliders/swatches/panes
+            if (sourceEvent && sourceEvent.target) {
+                var t = sourceEvent.target;
+                if (t.closest('.cp-pane') || t.closest('.cp-tab-bar')) return;
+            }
             if (window._moveSelected.copyTimer) { clearTimeout(window._moveSelected.copyTimer); }
             window._moveSelected = null;
+            _onSelectionChanged(null);
             starDrawDots();
         }
         var ctrlPanel = document.getElementById('ctrl-panel');
         if (ctrlPanel) {
-            ctrlPanel.addEventListener('click',       function(e){ e.stopPropagation(); deactivateEraser(e); deactivateMoveRotate(); });
+            ctrlPanel.addEventListener('click',       function(e){ e.stopPropagation(); deactivateEraser(e); deactivateMoveRotate(e); });
             ctrlPanel.addEventListener('contextmenu', function(e){ e.stopPropagation(); e.preventDefault(); });
             ctrlPanel.addEventListener('mousedown',   function(e){ e.stopPropagation(); }, false);
-            ctrlPanel.addEventListener('touchstart',  function(e){ deactivateEraser(e); deactivateMoveRotate(); }, { passive: true });
+            ctrlPanel.addEventListener('touchstart',  function(e){ deactivateEraser(e); deactivateMoveRotate(e); }, { passive: true });
         }
     }
     inject();
