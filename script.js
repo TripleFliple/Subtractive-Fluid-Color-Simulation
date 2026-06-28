@@ -2724,8 +2724,8 @@ canvas.addEventListener('touchstart', function(e) {
     if (e.targetTouches.length !== 1) return;
     var t = e.targetTouches[0];
     if (starPanelHit(t.clientX, t.clientY)) return;
-    // If selection system consumed this touch (object tapped), don't place
-    if (window._touchConsumedBySelection) return;
+    // Check directly if this touch hits an existing object — if so, don't place
+    if (_moveHitTest(t.clientX, t.clientY)) return;
     _touchMoved = false;
     _touchPlaceId = t.identifier;
     _touchPlaceTimer = setTimeout(function() {
@@ -3033,8 +3033,7 @@ canvas.addEventListener('touchstart', function(e) {
     if (window.ERASER_ACTIVE) return;
     var t = e.touches[0];
     var consumed = _movePointerDown(t.clientX, t.clientY);
-    if (consumed) { window._touchConsumedBySelection = true; e.stopPropagation(); }
-    else { window._touchConsumedBySelection = false; }
+    if (consumed) e.stopPropagation();
 }, { passive: true });
 canvas.addEventListener('touchmove', function(e) {
     if (!window._moveSelected || !window._moveSelected.dragMode) return;
