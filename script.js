@@ -2764,9 +2764,9 @@ canvas.addEventListener('touchend', function(e) {
         clearTimeout(_touchPlaceTimer);
         _touchPlaceTimer = null;
         if (!_touchMoved) {
-            // Short tap: place star/fan
+            // Short tap: place star/fan only if not tapping an existing object
             var t = e.changedTouches[0];
-            if (!starPanelHit(t.clientX, t.clientY)) {
+            if (!starPanelHit(t.clientX, t.clientY) && !_moveHitTest(t.clientX, t.clientY)) {
                 var rect = canvas.getBoundingClientRect();
                 var x = (t.clientX - rect.left) / rect.width;
                 var y = 1.0 - (t.clientY - rect.top) / rect.height;
