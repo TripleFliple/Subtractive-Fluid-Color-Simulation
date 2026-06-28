@@ -96,12 +96,13 @@ startGUI();
 // ── Eraser cursor + logic ─────────────────────────────────────────────────
 var ERASER_RADIUS_PX = 40; // visual radius in CSS pixels — single source of truth
 
-var eraserCursor = document.createElement('div');
-var _ed = (ERASER_RADIUS_PX * 2) + 'px';
-eraserCursor.style.cssText = 'position:fixed;pointer-events:none;display:none;z-index:99999;' +
-    'width:'+_ed+';height:'+_ed+';border-radius:50%;border:2px solid rgba(255,60,60,0.9);' +
-    'transform:translate(-50%,-50%);box-sizing:border-box;';
-document.body.appendChild(eraserCursor);
+// Eraser circle is drawn directly onto _dotCanvas rather than a DOM div.
+// This avoids mobile browser synthetic mouse events showing a stuck cursor.
+var _eraserCursorX = -999, _eraserCursorY = -999, _eraserCursorVisible = false;
+function _eraserCursorShow(x, y) { _eraserCursorX = x; _eraserCursorY = y; _eraserCursorVisible = true; starDrawDots(); }
+function _eraserCursorHide()     { if (_eraserCursorVisible) { _eraserCursorVisible = false; starDrawDots(); } }
+// Stub so existing deactivateEraser references don't break
+var eraserCursor = { style: { display: '' } };
 
 function eraserUVRadius() {
     // Convert the CSS pixel radius to UV space using the canvas's current rendered size.
@@ -155,13 +156,10 @@ function eraserApply(clientX, clientY) {
     starDrawDots();
 }
 
-// Mouse eraser events (desktop only — touch fires synthetic mousemove we must ignore)
+// Mouse eraser events (desktop only)
 canvas.addEventListener('mousemove', function(e) {
     if (!window.ERASER_ACTIVE) return;
-    if (e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents) return;
-    eraserCursor.style.display = 'block';
-    eraserCursor.style.left = e.clientX + 'px';
-    eraserCursor.style.top  = e.clientY + 'px';
+    _eraserCursorShow(e.clientX, e.clientY);
     if (e.buttons & 1) eraserApply(e.clientX, e.clientY);
 });
 canvas.addEventListener('mousedown', function(e) {
@@ -169,35 +167,33 @@ canvas.addEventListener('mousedown', function(e) {
     eraserApply(e.clientX, e.clientY);
 });
 canvas.addEventListener('mouseleave', function() {
-    eraserCursor.style.display = 'none';
+    _eraserCursorHide();
 });
 
 // Touch eraser events
-// Tap: erase silently, no circle shown (avoids stuck cursor)
-// Drag: show circle while finger moves, hide immediately on lift
+// Tap: erase silently, no circle shown
+// Drag: show circle on canvas while moving, hide on lift
 var _eraserIsDragging = false;
 
 canvas.addEventListener('touchstart', function(e) {
     if (!window.ERASER_ACTIVE) return;
     _eraserIsDragging = false;
     var t = e.touches[0];
-    eraserApply(t.clientX, t.clientY); // erase on tap, no circle
+    eraserApply(t.clientX, t.clientY);
 }, { passive: true });
 
 canvas.addEventListener('touchmove', function(e) {
     if (!window.ERASER_ACTIVE) return;
     _eraserIsDragging = true;
     var t = e.touches[0];
-    eraserCursor.style.display = 'block';
-    eraserCursor.style.left = t.clientX + 'px';
-    eraserCursor.style.top  = t.clientY + 'px';
+    _eraserCursorShow(t.clientX, t.clientY);
     eraserApply(t.clientX, t.clientY);
 }, { passive: true });
 
 document.addEventListener('touchend', function() {
     if (_eraserIsDragging) {
-        eraserCursor.style.display = 'none';
         _eraserIsDragging = false;
+        _eraserCursorHide();
     }
 }, { passive: true });
 // ── End eraser ────────────────────────────────────────────────────────────
@@ -361,7 +357,7 @@ function startGUI () {
         eraserBtn.style.borderColor    = window.ERASER_ACTIVE ? '#f55' : '';
         eraserBtn.style.background     = window.ERASER_ACTIVE ? 'rgba(255,80,80,0.15)' : '';
         canvas.style.cursor            = window.ERASER_ACTIVE ? 'none' : '';
-        if (!window.ERASER_ACTIVE) eraserCursor.style.display = 'none';
+        if (!window.ERASER_ACTIVE) _eraserCursorHide();
     });
 
     // Clear Stars/Fans button (header)
@@ -3105,6 +3101,18 @@ function starDrawDots() {
     var ctx = _dotCanvas.getContext('2d');
     var W = _dotCanvas.width, H = _dotCanvas.height;
     ctx.clearRect(0, 0, W, H);
+
+    // Draw eraser circle if visible (canvas-drawn, immune to synthetic mouse events)
+    if (_eraserCursorVisible) {
+        var er = ERASER_RADIUS_PX;
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(_eraserCursorX, _eraserCursorY, er, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(255,60,60,0.9)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.restore();
+    }
     STARS.forEach(function(s) {
         var sx = s.x * W;
         var sy = (1 - s.y) * H;
@@ -3470,7 +3478,7 @@ function _drawSelectionRing(ctx, x, y) {
             var eb = document.querySelector('[data-eraser-btn]');
             if (eb) { eb.style.color = ''; eb.style.borderColor = ''; eb.style.background = ''; }
             canvas.style.cursor = '';
-            eraserCursor.style.display = 'none';
+            _eraserCursorHide();
         }
         function deactivateMoveRotate(sourceEvent) {
             if (!window._moveSelected) return;
