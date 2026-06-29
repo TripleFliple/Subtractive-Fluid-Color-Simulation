@@ -295,13 +295,13 @@ function startGUI () {
     var css = document.createElement('style');
     css.textContent = `
     #ctrl-panel{position:fixed;top:10px;left:10px;width:310px;font-family:monospace;
-      font-size:11px;color:#ccc;z-index:10000;user-select:none}
+      font-size:13px;color:#ccc;z-index:10000;user-select:none}
     #ctrl-panel *{box-sizing:border-box}
     .cp-header{background:rgba(0,0,0,0.88);border:1px solid rgba(255,255,255,0.12);
       border-radius:8px 8px 0 0;padding:6px 8px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
     .cp-tab-bar{display:flex;background:rgba(0,0,0,0.82);border-left:1px solid rgba(255,255,255,0.12);
       border-right:1px solid rgba(255,255,255,0.12)}
-    .cp-tab{flex:1;padding:6px 4px;text-align:center;font-size:13px;color:#666;
+    .cp-tab{flex:1;padding:6px 4px;text-align:center;font-size:14px;color:#666;
       cursor:pointer;border-bottom:2px solid transparent;transition:color 0.15s}
     .cp-tab:hover{color:#aaa}
     .cp-tab.active{color:#4af;border-bottom-color:#4af}
@@ -310,22 +310,22 @@ function startGUI () {
     .cp-pane.active{display:block}
     .cp-row{display:grid;grid-template-columns:115px 1fr 48px;align-items:center;
       gap:5px;margin-bottom:6px}
-    .cp-lbl{font-size:10px;color:#888}
+    .cp-lbl{font-size:12px;color:#888}
     .cp-sl{width:100%;accent-color:#4af;cursor:pointer}
-    .cp-val{font-size:10px;color:#4af;text-align:right}
+    .cp-val{font-size:12px;color:#4af;text-align:right}
     .cp-select{background:#111;color:#ccc;border:1px solid rgba(255,255,255,0.15);
-      border-radius:3px;padding:2px 4px;font-size:10px;width:100%;cursor:pointer}
+      border-radius:3px;padding:2px 4px;font-size:12px;width:100%;cursor:pointer}
     .cp-check-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;cursor:pointer}
     .cp-check-row input{accent-color:#4af;cursor:pointer}
-    .cp-check-lbl{font-size:10px;color:#888}
-    .cp-sec{font-size:9px;color:#555;letter-spacing:1px;text-transform:uppercase;margin:8px 0 4px}
+    .cp-check-lbl{font-size:12px;color:#888}
+    .cp-sec{font-size:10px;color:#555;letter-spacing:1px;text-transform:uppercase;margin:8px 0 4px}
     .cp-btn{background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);
-      border-radius:4px;color:#aaa;padding:4px 8px;cursor:pointer;font-size:10px;
+      border-radius:4px;color:#aaa;padding:4px 8px;cursor:pointer;font-size:12px;
       font-family:monospace;margin:2px}
     .cp-btn:hover{background:rgba(255,255,255,0.18);color:#fff}
     .cp-collapse-btn{width:100%;margin-top:8px;background:rgba(255,255,255,0.05);
       border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#888;padding:4px;
-      cursor:pointer;font-size:10px;font-family:monospace;text-align:center}
+      cursor:pointer;font-size:12px;font-family:monospace;text-align:center}
     .cp-collapse-btn:hover{background:rgba(255,255,255,0.12);color:#fff}
     #ctrl-panel.cp-hidden .cp-tab-bar,
     #ctrl-panel.cp-hidden .cp-pane{display:none!important}
@@ -486,7 +486,13 @@ function startGUI () {
         pane.appendChild(d);
     }
 
-    // ── TAB 0: QUALITY ────────────────────────────────────────────────────
+    // ── TAB 0: STARS (placeholder — star panel IIFE populates its own DOM) ─
+    addTab('Stars');   // panes[0]
+
+    // ── TAB 1: FANS (placeholder — fan panel IIFE populates its own DOM) ──
+    addTab('Fans');    // panes[1]
+
+    // ── TAB 2: QUALITY ────────────────────────────────────────────────────
     var qualPane = addTab('Quality');
 
     makeSelect(qualPane, 'Quality', {'128':128,'256':256,'512':512,'1024':1024,'2048':2048},
@@ -496,16 +502,13 @@ function startGUI () {
 
     makeSec(qualPane, 'Simulation');
 
-    // Tick Rate slider
     var tickSlider = makeSlider(qualPane, 'Tick Rate', 0.05, 3.0, config.TICK_RATE, 0.05, 2,
         function(v){ config.TICK_RATE = v; });
 
-    // Paused checkbox
     var pausedCb = makeCheckbox(qualPane, 'Paused', config.PAUSED, function(v){ config.PAUSED = v; });
-    // keep listen() equivalent — sync checkbox if paused changes externally (e.g. spacebar)
     setInterval(function(){ pausedCb.checked = config.PAUSED; }, 100);
 
-    // ── TAB 1: GLOBAL CONTROLS ────────────────────────────────────────────
+    // ── TAB 3: GLOBAL CONTROLS ────────────────────────────────────────────
     var globalPane = addTab('Controls');
 
     makeSlider(globalPane, 'Density Diffuse', 0, 4.0, config.DENSITY_DISSIPATION, 0.01, 2,
@@ -539,13 +542,7 @@ function startGUI () {
     makeSlider(globalPane, 'Sunrays Weight', 0.3, 1.0, config.SUNRAYS_WEIGHT, 0.01, 2,
         function(v){ config.SUNRAYS_WEIGHT = v; });
 
-    // ── TAB 2: STARS (placeholder — star panel IIFE populates its own DOM) ─
-    addTab('Stars');   // panes[2] — content injected by star panel IIFE below
-
-    // ── TAB 3: FANS (placeholder — fan panel IIFE populates its own DOM) ──
-    addTab('Fans');    // panes[3] — content injected by fan panel IIFE below
-
-    // Activate first tab
+    // Activate Stars tab by default
     switchTab(0);
 
     // Expose tab switcher and panes so IIFEs can inject content
@@ -3209,15 +3206,15 @@ function _drawSelectionRing(ctx, x, y) {
     // Inject CSS for star/fan sliders (reuse cp-* classes, add sp-specific ones)
     var css = document.createElement('style');
     css.textContent =
-        '.sp-sec{font-size:9px;color:#555;letter-spacing:1px;text-transform:uppercase;margin:7px 0 4px}'+
+        '.sp-sec{font-size:10px;color:#555;letter-spacing:1px;text-transform:uppercase;margin:7px 0 4px}'+
         '.sp-row{display:grid;grid-template-columns:105px 1fr 40px;align-items:center;gap:5px;margin-bottom:5px}'+
-        '.sp-lbl{font-size:10px;color:#888}'+
+        '.sp-lbl{font-size:12px;color:#888}'+
         '.sp-sl{width:100%;accent-color:#4af;cursor:pointer}'+
-        '.sp-val{font-size:10px;color:#4af;text-align:right}'+
+        '.sp-val{font-size:12px;color:#4af;text-align:right}'+
         '.sp-btn{background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);'+
-        'border-radius:4px;color:#aaa;padding:4px 8px;cursor:pointer;font-size:10px;font-family:monospace;margin:2px}'+
+        'border-radius:4px;color:#aaa;padding:4px 8px;cursor:pointer;font-size:12px;font-family:monospace;margin:2px}'+
         '.sp-btn:hover{background:rgba(255,255,255,0.18);color:#fff}'+
-        '.sp-tip{margin-top:7px;font-size:9px;color:#444;line-height:1.6}'+
+        '.sp-tip{margin-top:7px;font-size:10px;color:#444;line-height:1.6}'+
         '#sp-sw{width:34px;height:34px;border-radius:5px;flex-shrink:0;border:1px solid rgba(255,255,255,0.15)}'+
         '#sp-hc{width:100%;height:13px;display:block;border-radius:3px;cursor:crosshair;border:1px solid rgba(255,255,255,0.12)}';
     document.head.appendChild(css);
@@ -3227,8 +3224,8 @@ function _drawSelectionRing(ctx, x, y) {
         var panes = window._cpPanes;
         if (!panes) { setTimeout(inject, 50); return; }
 
-        var starPane = panes[2];
-        var fanPane  = panes[3];
+        var starPane = panes[0];
+        var fanPane  = panes[1];
 
         // ── STARS pane ─────────────────────────────────────────────────────
 
@@ -3512,7 +3509,7 @@ function _drawSelectionRing(ctx, x, y) {
         var panes = window._cpPanes;
         if (!panes) return 'star';
         // Tab 2 = Stars, Tab 3 = Fans
-        if (panes[3] && panes[3].classList.contains('active')) return 'fan';
+        if (panes[1] && panes[1].classList.contains('active')) return 'fan';
         return 'star';
     };
 })();
