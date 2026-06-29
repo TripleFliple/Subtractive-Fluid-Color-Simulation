@@ -438,6 +438,7 @@ function startGUI () {
         tabs.forEach(function(t,i){ t.classList.toggle('active', i===idx); });
         panes.forEach(function(p,i){ p.classList.toggle('active', i===idx); });
         activeTab = idx;
+        paneWrap.scrollTop = 0;
     }
 
     // ── Helper builders ───────────────────────────────────────────────────
