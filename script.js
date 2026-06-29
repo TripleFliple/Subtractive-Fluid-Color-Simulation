@@ -331,9 +331,10 @@ function startGUI () {
     #ctrl-panel.cp-hidden .cp-pane{display:none!important}
     #ctrl-panel.cp-hidden .cp-header{border-radius:8px}
     @media (max-width: 600px) {
-      #ctrl-panel{left:0;right:0;top:auto;bottom:0;width:100%;border-radius:0}
-      .cp-header{border-radius:0!important}
-      .cp-pane{border-radius:0!important;max-height:calc(33vh - 60px);overflow-y:auto;-webkit-overflow-scrolling:touch}
+      #ctrl-panel{left:0;right:0;top:auto;bottom:0;width:100%;border-radius:0;max-height:33vh;display:flex;flex-direction:column}
+      .cp-header{border-radius:0!important;flex-shrink:0}
+      .cp-tab-bar{flex-shrink:0}
+      .cp-pane{border-radius:0!important;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;min-height:0;max-height:none}
       .sp-sl{min-height:28px}
     }
     `;
