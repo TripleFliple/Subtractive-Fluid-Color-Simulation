@@ -335,6 +335,7 @@ function startGUI () {
       .cp-header{border-radius:0!important;flex-shrink:0}
       .cp-tab-bar{flex-shrink:0}
       .cp-pane{border-radius:0!important;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;min-height:0;max-height:none}
+      .cp-pane.active{display:flex;flex-direction:column;min-height:calc(33vh - 80px)}
       .sp-sl{min-height:28px}
     }
     `;
